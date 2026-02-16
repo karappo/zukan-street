@@ -449,25 +449,47 @@
     }
   }
 
-  /* ── Drag pin ── */
+  /* ── Drag pin (in toolbar) ── */
   #dragPin {
-    position: absolute;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px 4px 6px;
+    border-radius: var(--radius);
     cursor: grab;
-    pointer-events: auto;
-    transition: transform 0.2s, opacity 0.2s;
-    opacity: 0.7;
     user-select: none;
+    transition: all 0.2s;
+    position: relative;
 
-    &:hover { opacity: 1; }
+    &:hover {
+      background: var(--surface-hover);
+      transform: translateY(-2px);
+
+      .drag-pin-hint {
+        color: var(--text);
+      }
+    }
+
+    &:active {
+      cursor: grabbing;
+    }
 
     &.dragging {
+      position: fixed;
+      z-index: 1000;
+      padding: 0;
+      background: none;
       cursor: grabbing;
       transition: none;
-      opacity: 1;
+      pointer-events: none;
+
+      .drag-pin-hint { display: none; }
+
+      .drag-pin-icon svg {
+        width: 36px;
+        height: 45px;
+        filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+      }
     }
 
     &.invalid {
@@ -476,18 +498,24 @@
     }
   }
 
-  .drag-pin-icon svg {
-    width: 32px;
-    height: 40px;
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+  .drag-pin-icon {
+    display: flex;
+    align-items: center;
+
+    svg {
+      width: 20px;
+      height: 25px;
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
+      transition: all 0.2s;
+    }
   }
 
   .drag-pin-hint {
-    text-align: center;
-    font-size: 11px;
+    font-size: 13px;
     color: var(--text-muted);
-    margin-top: 4px;
     pointer-events: none;
+    white-space: nowrap;
+    transition: color 0.15s;
   }
 
   /* ── Toast ── */
@@ -533,13 +561,14 @@
   <div class="streetview-wrap">
     <div id="streetview"></div>
     <div id="markerOverlay"></div>
-    <div id="dragPin">
-      <div class="drag-pin-icon"><svg viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24C32 7.163 24.837 0 16 0z" fill="#ef4444"/><circle cx="16" cy="14" r="6" fill="white" fill-opacity="0.9"/></svg></div>
-      <div class="drag-pin-hint">ドラッグして配置</div>
-    </div>
 
     <!-- Floating Toolbar -->
     <div class="toolbar">
+      <div id="dragPin">
+        <div class="drag-pin-icon"><svg viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24C32 7.163 24.837 0 16 0z" fill="#ef4444"/><circle cx="16" cy="14" r="6" fill="white" fill-opacity="0.9"/></svg></div>
+        <div class="drag-pin-hint">ピンを追加</div>
+      </div>
+      <div class="divider"></div>
       <button class="tool-btn" onclick="resetView()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
         初期位置に戻る
@@ -1029,17 +1058,13 @@ function resetView() {
 function initDragPin() {
   const dragPin = document.getElementById('dragPin');
   const svEl = document.getElementById('streetview');
-  const hint = dragPin.querySelector('.drag-pin-hint');
   let isValid = false;
 
-  // ピンを初期位置にリセット
-  function resetPinPosition() {
+  function resetPin() {
     dragPin.style.left = '';
     dragPin.style.top = '';
-    dragPin.style.bottom = '';
-    dragPin.style.position = '';
+    dragPin.style.transform = '';
     dragPin.classList.remove('dragging', 'invalid');
-    hint.style.display = '';
     isDragging = false;
     isValid = false;
   }
@@ -1048,23 +1073,18 @@ function initDragPin() {
     e.preventDefault();
     isDragging = true;
     dragPin.classList.add('dragging');
-    hint.style.display = 'none';
 
-    // 初回位置をカーソルに合わせる
-    const wrapRect = dragPin.parentElement.getBoundingClientRect();
-    dragPin.style.position = 'absolute';
-    dragPin.style.bottom = 'auto';
-    dragPin.style.left = (e.clientX - wrapRect.left) + 'px';
-    dragPin.style.top = (e.clientY - wrapRect.top) + 'px';
+    // position: fixed でツールバーからポップアウト
+    dragPin.style.left = e.clientX + 'px';
+    dragPin.style.top = e.clientY + 'px';
     dragPin.style.transform = 'translate(-50%, -100%)';
   });
 
   document.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
 
-    const wrapRect = dragPin.parentElement.getBoundingClientRect();
-    dragPin.style.left = (e.clientX - wrapRect.left) + 'px';
-    dragPin.style.top = (e.clientY - wrapRect.top) + 'px';
+    dragPin.style.left = e.clientX + 'px';
+    dragPin.style.top = e.clientY + 'px';
 
     // SVの範囲内でのみpitch判定
     const svRect = svEl.getBoundingClientRect();
@@ -1102,9 +1122,7 @@ function initDragPin() {
       showToast('地面の上にピンを置いてください');
     }
 
-    // 位置リセット
-    dragPin.style.transform = '';
-    resetPinPosition();
+    resetPin();
   });
 }
 
