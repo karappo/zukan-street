@@ -113,6 +113,14 @@
       width: 100%;
       height: 100%;
     }
+
+    #markerOverlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 10;
+    }
   }
 
   /* ── Toolbar (floating) ── */
@@ -278,6 +286,7 @@
   .sv-marker {
     position: absolute;
     cursor: pointer;
+    pointer-events: auto;
     transform: translate(-50%, -100%);
     transition: transform 0.15s ease;
     filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
@@ -440,22 +449,45 @@
     }
   }
 
-  /* ── Click capture overlay for pin mode ── */
-  .click-capture {
+  /* ── Drag pin ── */
+  #dragPin {
     position: absolute;
-    inset: 0;
-    z-index: 40;
-    cursor: crosshair;
-    display: none;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    cursor: grab;
+    pointer-events: auto;
+    transition: transform 0.2s, opacity 0.2s;
+    opacity: 0.7;
+    user-select: none;
+
+    &:hover { opacity: 1; }
+
+    &.dragging {
+      cursor: grabbing;
+      transition: none;
+      opacity: 1;
+    }
+
+    &.invalid {
+      filter: grayscale(1) opacity(0.4);
+      cursor: not-allowed;
+    }
   }
 
-  .pin-mode .click-capture {
-    display: block;
+  .drag-pin-icon svg {
+    width: 32px;
+    height: 40px;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
   }
 
-  /* ── Crosshair when in pin mode ── */
-  .pin-mode #streetview {
-    cursor: crosshair;
+  .drag-pin-hint {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    pointer-events: none;
   }
 
   /* ── Toast ── */
@@ -500,15 +532,14 @@
   <!-- Street View -->
   <div class="streetview-wrap">
     <div id="streetview"></div>
-    <div class="click-capture" id="clickCapture"></div>
+    <div id="markerOverlay"></div>
+    <div id="dragPin">
+      <div class="drag-pin-icon"><svg viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24C32 7.163 24.837 0 16 0z" fill="#ef4444"/><circle cx="16" cy="14" r="6" fill="white" fill-opacity="0.9"/></svg></div>
+      <div class="drag-pin-hint">ドラッグして配置</div>
+    </div>
 
     <!-- Floating Toolbar -->
     <div class="toolbar">
-      <button class="tool-btn" id="btnPinMode" onclick="togglePinMode()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        ピンを追加
-      </button>
-      <div class="divider"></div>
       <button class="tool-btn" onclick="resetView()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
         初期位置に戻る
@@ -560,7 +591,7 @@
 <script>
 // ── State ──
 let panorama;
-let pinMode = false;
+let isDragging = false;
 let pendingClick = null;
 let selectedColor = '#ef4444';
 let annotations = [];
@@ -668,17 +699,28 @@ function computeDistance(lat1, lng1, lat2, lng2) {
   return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Given current panorama position, compute heading/pitch to an annotation's lat/lng
-// pitch is estimated from the original pitch (since we can't know the real altitude)
+// 現在のパノラマ位置からアノテーションのlat/lngへのheading/pitchを計算する。
+// pitchは距離の変化に応じて再計算される（同じ高さの点を指し続けるため）。
+//
+// 計算方法:
+//   元の距離 d0 と記録時の pitch から推定高さ h = d0 * tan(pitch) を求め、
+//   現在の距離 d1 を使って pitch = atan2(h, d1) で再計算する。
+//   d0 と d1 の比率のみに依存するため、投影距離が大きいほど安定する。
 function getAnnotationPov(anno, panoLat, panoLng) {
   const heading = computeBearing(panoLat, panoLng, anno.lat, anno.lng);
-  const distance = computeDistance(panoLat, panoLng, anno.lat, anno.lng);
 
-  // Estimate pitch: keep the original pitch but adjust slightly based on distance change
-  // For nearby annotations (<100m), this gives a reasonable approximation
-  const pitch = anno.pitch;
+  // pitch再計算: 記録時の距離とpitchから推定高さを求め、現在の距離で補正
+  if (anno.originLat != null && anno.originLng != null) {
+    const d0 = computeDistance(anno.originLat, anno.originLng, anno.lat, anno.lng);
+    const d1 = computeDistance(panoLat, panoLng, anno.lat, anno.lng);
+    if (d0 > 0.1) {
+      const h = d0 * Math.tan(anno.pitch * Math.PI / 180);
+      const pitch = Math.atan2(h, d1) * (180 / Math.PI);
+      return { heading, pitch };
+    }
+  }
 
-  return { heading, pitch };
+  return { heading, pitch: anno.pitch };
 }
 
 // ── PanoMarker math (heading/pitch → screen pixel) ──
@@ -750,15 +792,16 @@ function pixelToPov(x, y, currentPov, canvas) {
   const vz = dH;
   const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
 
-  // Rotate by current POV (inverse camera rotation)
+  // カメラ空間からワールド空間への逆回転
   const nx = vx / len;
   const ny = vy / len;
   const nz = vz / len;
 
-  // Rotate around X axis (pitch)
+  // X軸周りに -pitch 回転（カメラ→ワールド変換）
+  // 画面Yは下向き、ワールドのpitch正は上向きなので、回転を反転させる
   const rx = nx;
-  const ry = ny * Math.cos(cP) + nz * Math.sin(cP);
-  const rz = -ny * Math.sin(cP) + nz * Math.cos(cP);
+  const ry = ny * Math.cos(cP) - nz * Math.sin(cP);
+  const rz = ny * Math.sin(cP) + nz * Math.cos(cP);
 
   // World heading and pitch
   const heading = (Math.atan2(rx, rz) * RAD2DEG + currentPov.heading + 360) % 360;
@@ -777,6 +820,7 @@ function markerSVG(color) {
 
 // ── Render all overlays ──
 function renderOverlays() {
+  const container = document.getElementById('markerOverlay');
   const canvas = document.getElementById('streetview');
   const pov = panorama.getPov();
   const panoPos = panorama.getPosition();
@@ -817,7 +861,7 @@ function renderOverlays() {
         e.stopPropagation();
         selectAnnotation(anno.id);
       });
-      canvas.appendChild(el);
+      container.appendChild(el);
       overlays[i] = { el };
     }
 
@@ -865,28 +909,12 @@ function selectAnnotation(id) {
   if (anno) {
     const panoPos = panorama.getPosition();
     if (panoPos) {
-      const heading = computeBearing(panoPos.lat(), panoPos.lng(), anno.lat, anno.lng);
-      panorama.setPov({ heading, pitch: anno.pitch });
+      const pov = getAnnotationPov(anno, panoPos.lat(), panoPos.lng());
+      panorama.setPov(pov);
     }
   }
   renderSidebar();
   renderOverlays();
-}
-
-// ── Pin mode ──
-function togglePinMode() {
-  pinMode = !pinMode;
-  const btn = document.getElementById('btnPinMode');
-  const main = document.getElementById('mainArea');
-
-  if (pinMode) {
-    btn.classList.add('active');
-    main.classList.add('pin-mode');
-    showToast('パノラマ上をクリックしてピンを配置');
-  } else {
-    btn.classList.remove('active');
-    main.classList.remove('pin-mode');
-  }
 }
 
 // ── Modal ──
@@ -912,10 +940,31 @@ function saveAnnotation() {
   const panoLat = panoPos.lat();
   const panoLng = panoPos.lng();
 
-  // Estimate a world lat/lng for the annotation
-  // Project ~15m in the direction of the heading
-  const ESTIMATED_DISTANCE = 15; // meters
+  // カメラ高さとpitch角度からアノテーション対象までの距離を推定する。
+  //
+  // pitch < 0（下向き = 地面）:
+  //   視線と地面の交点を使う。距離 = カメラ高さ / tan(|pitch|)
+  //   平坦な地面では正確な値になる。
+  //
+  // pitch > 0（上向き = 建物・電柱等）:
+  //   カメラより約5m上の高さにある物体を想定。距離 = 5 / tan(pitch)
+  //   標識・電柱中腹・建物ファサードなど一般的な対象に妥当な近似。
+  //
+  // pitch ≈ 0（水平 = 遠方）:
+  //   tan(0)→0 で距離が発散するため、上限100mとする。
   const DEG2RAD = Math.PI / 180;
+  const CAMERA_HEIGHT = 2.5; // Street Viewカメラの地面からの高さ (m)
+  const absPitch = Math.abs(pendingClick.pitch);
+  let ESTIMATED_DISTANCE;
+  if (absPitch < 1) {
+    ESTIMATED_DISTANCE = 100; // ほぼ水平 → 遠方のオブジェクト
+  } else if (pendingClick.pitch < 0) {
+    // 視線と地面の交点までの水平距離
+    ESTIMATED_DISTANCE = Math.min(100, Math.max(5, CAMERA_HEIGHT / Math.tan(absPitch * DEG2RAD)));
+  } else {
+    const ABOVE_CAM_HEIGHT = 5; // カメラより上の対象物の推定高さ (m)
+    ESTIMATED_DISTANCE = Math.min(100, Math.max(5, ABOVE_CAM_HEIGHT / Math.tan(absPitch * DEG2RAD)));
+  }
   const bearing = pendingClick.heading * DEG2RAD;
   const lat1 = panoLat * DEG2RAD;
   const lng1 = panoLng * DEG2RAD;
@@ -935,6 +984,8 @@ function saveAnnotation() {
     panoId: panorama.getPano(),
     lat: lat2 / DEG2RAD,
     lng: lng2 / DEG2RAD,
+    originLat: panoLat,
+    originLng: panoLng,
     heading: pendingClick.heading,
     pitch: pendingClick.pitch,
     title,
@@ -949,9 +1000,6 @@ function saveAnnotation() {
   renderSidebar();
   renderOverlays();
   showToast('ピンを追加しました');
-
-  // Exit pin mode
-  if (pinMode) togglePinMode();
 }
 
 // ── Toast ──
@@ -977,6 +1025,89 @@ function resetView() {
   panorama.setZoom(1);
 }
 
+// ── Drag pin ──
+function initDragPin() {
+  const dragPin = document.getElementById('dragPin');
+  const svEl = document.getElementById('streetview');
+  const hint = dragPin.querySelector('.drag-pin-hint');
+  let isValid = false;
+
+  // ピンを初期位置にリセット
+  function resetPinPosition() {
+    dragPin.style.left = '';
+    dragPin.style.top = '';
+    dragPin.style.bottom = '';
+    dragPin.style.position = '';
+    dragPin.classList.remove('dragging', 'invalid');
+    hint.style.display = '';
+    isDragging = false;
+    isValid = false;
+  }
+
+  dragPin.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    isDragging = true;
+    dragPin.classList.add('dragging');
+    hint.style.display = 'none';
+
+    // 初回位置をカーソルに合わせる
+    const wrapRect = dragPin.parentElement.getBoundingClientRect();
+    dragPin.style.position = 'absolute';
+    dragPin.style.bottom = 'auto';
+    dragPin.style.left = (e.clientX - wrapRect.left) + 'px';
+    dragPin.style.top = (e.clientY - wrapRect.top) + 'px';
+    dragPin.style.transform = 'translate(-50%, -100%)';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    const wrapRect = dragPin.parentElement.getBoundingClientRect();
+    dragPin.style.left = (e.clientX - wrapRect.left) + 'px';
+    dragPin.style.top = (e.clientY - wrapRect.top) + 'px';
+
+    // SVの範囲内でのみpitch判定
+    const svRect = svEl.getBoundingClientRect();
+    const x = e.clientX - svRect.left;
+    const y = e.clientY - svRect.top;
+
+    if (x >= 0 && x <= svRect.width && y >= 0 && y <= svRect.height) {
+      const pov = panorama.getPov();
+      const targetPov = pixelToPov(x, y, pov, svEl);
+      if (targetPov.pitch < -2) {
+        isValid = true;
+        dragPin.classList.remove('invalid');
+      } else {
+        isValid = false;
+        dragPin.classList.add('invalid');
+      }
+    } else {
+      isValid = false;
+      dragPin.classList.add('invalid');
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (!isDragging) return;
+
+    if (isValid) {
+      const svRect = svEl.getBoundingClientRect();
+      const x = e.clientX - svRect.left;
+      const y = e.clientY - svRect.top;
+      const pov = panorama.getPov();
+      const targetPov = pixelToPov(x, y, pov, svEl);
+      pendingClick = targetPov;
+      openModal();
+    } else {
+      showToast('地面の上にピンを置いてください');
+    }
+
+    // 位置リセット
+    dragPin.style.transform = '';
+    resetPinPosition();
+  });
+}
+
 // ── Initialize Google Maps ──
 function initMap() {
   panorama = new google.maps.StreetViewPanorama(
@@ -1000,45 +1131,26 @@ function initMap() {
   panorama.addListener('pov_changed', renderOverlays);
   panorama.addListener('zoom_changed', renderOverlays);
   panorama.addListener('resize', renderOverlays);
-  panorama.addListener('pano_changed', () => {
-    // Clear existing overlay elements since pano container resets
-    overlays.forEach(ov => {
-      if (ov.el && ov.el.parentNode) {
-        ov.el.parentNode.removeChild(ov.el);
-      }
-    });
-    overlays = [];
-    setTimeout(renderOverlays, 300);
-  });
-  panorama.addListener('position_changed', () => {
-    overlays.forEach(ov => {
-      if (ov.el && ov.el.parentNode) {
-        ov.el.parentNode.removeChild(ov.el);
-      }
-    });
-    overlays = [];
-    setTimeout(renderOverlays, 300);
-  });
+  // マーカーは #markerOverlay 内にあり Google Maps の DOM 管理外のため、
+  // パノラマ変更時にマーカーの破棄・再生成は不要
+  panorama.addListener('pano_changed', renderOverlays);
+  panorama.addListener('position_changed', renderOverlays);
 
-  // Initial render after tiles load
+  // パノラマ位置が確定したらデモアノテーションに originLat/originLng を設定
   google.maps.event.addListenerOnce(panorama, 'pano_changed', () => {
+    const initPos = panorama.getPosition();
+    if (initPos) {
+      annotations.forEach(a => {
+        if (a.originLat == null) {
+          a.originLat = initPos.lat();
+          a.originLng = initPos.lng();
+        }
+      });
+    }
     setTimeout(renderOverlays, 500);
   });
 
-  // Click handler for pin mode — uses capture overlay to prevent SV navigation
-  const captureEl = document.getElementById('clickCapture');
-  captureEl.addEventListener('click', (e) => {
-    const svEl = document.getElementById('streetview');
-    const rect = svEl.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const pov = panorama.getPov();
-    const targetPov = pixelToPov(x, y, pov, svEl);
-
-    pendingClick = targetPov;
-    openModal();
-  });
+  initDragPin();
 }
 
 // Load the API
