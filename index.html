@@ -482,6 +482,17 @@
       cursor: grabbing;
     }
 
+    /* ツールバー内の小さいアイコン */
+    .marker-pin {
+      width: 20px;
+      height: 25px;
+
+      svg {
+        filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
+      }
+    }
+
+    /* ドラッグ中: sv-marker と同じ見た目 */
     &.dragging {
       position: fixed;
       z-index: 1000;
@@ -490,27 +501,14 @@
       cursor: grabbing;
       transition: none;
       pointer-events: none;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
 
       .drag-pin-hint { display: none; }
 
-      .drag-pin-icon svg {
-        width: 36px;
-        height: 45px;
-        filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+      .marker-pin {
+        width: 32px;
+        height: 40px;
       }
-    }
-
-  }
-
-  .drag-pin-icon {
-    display: flex;
-    align-items: center;
-
-    svg {
-      width: 20px;
-      height: 25px;
-      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
-      transition: all 0.2s;
     }
   }
 
@@ -570,7 +568,7 @@
     <!-- Floating Toolbar -->
     <div class="toolbar">
       <div id="dragPin">
-        <div class="drag-pin-icon"><svg viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24C32 7.163 24.837 0 16 0z" fill="#ef4444"/><circle cx="16" cy="14" r="6" fill="white" fill-opacity="0.9"/></svg></div>
+        <div class="marker-pin"><svg viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24C32 7.163 24.837 0 16 0z" fill="#ef4444"/><circle cx="16" cy="14" r="6" fill="white" fill-opacity="0.9"/></svg></div>
         <div class="drag-pin-hint">ピンを追加</div>
       </div>
       <div class="divider"></div>
@@ -868,8 +866,9 @@ function renderOverlays() {
   const panoLng = panoPos.lng();
 
   // 距離によるピン表示制御
-  const MAX_DISTANCE = 80;   // これ以上は非表示 (m)
-  const FADE_START = 50;      // フェード開始距離 (m)
+  // MIN_PITCH=-1°での配置距離=100m。その先にフェードの余裕を持たせる
+  const MAX_DISTANCE = 130;  // これ以上は非表示 (m)
+  const FADE_START = 80;      // フェード開始距離 (m)
 
   annotations.forEach((anno, i) => {
     const distance = computeDistance(panoLat, panoLng, anno.lat, anno.lng);
@@ -1075,17 +1074,18 @@ function drawGroundGrid() {
 
   const pov = panorama.getPov();
   const CAM_H = 2.5;
-  const SPACING = 3;   // グリッド間隔 (m)
-  const EXTENT = 30;    // カメラからの最大距離 (m)
-  const STEPS = 40;     // 線の分割数
+  const SPACING = 5;    // グリッド間隔 (m)
+  const EXTENT = 300;    // カメラからの最大距離 (m)
+  const STEPS = 60;      // 線の分割数
 
-  // ── 水平線のY座標を計算して、地面領域のみ暗くする ──
+  // ── 水平線のY座標を計算 ──
   // pitch=0 の複数方向でスクリーン座標を求め、最小Yを水平線とする
   let horizonY = h;
   for (let hd = 0; hd < 360; hd += 10) {
     const pos = povToPixel({ heading: hd, pitch: 0 }, pov, svEl);
     if (pos && pos.y < horizonY) horizonY = pos.y;
   }
+
   // 水平線から下をグラデーションで暗くする
   const grad = ctx.createLinearGradient(0, horizonY, 0, h);
   grad.addColorStop(0, 'rgba(0, 0, 0, 0.15)');
@@ -1094,16 +1094,19 @@ function drawGroundGrid() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, horizonY, w, h - horizonY);
 
+  // 水平線でクリップ — グリッド線が暗いレイヤーの上にはみ出さない
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, horizonY, w, h - horizonY);
+  ctx.clip();
+
   // ── 地面上の点をスクリーン座標に投影 ──
   function projectGround(east, north) {
     const dist = Math.sqrt(east * east + north * north);
     if (dist < 0.5) return null;
     const heading = (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
     const pitch = -Math.atan2(CAM_H, dist) * 180 / Math.PI;
-    const pos = povToPixel({ heading, pitch }, pov, svEl);
-    // 水平線より上にはみ出すグリッド線をクリップ
-    if (pos && pos.y < horizonY) return null;
-    return pos;
+    return povToPixel({ heading, pitch }, pov, svEl);
   }
 
   function drawLine(pts, alpha) {
@@ -1134,7 +1137,7 @@ function drawGroundGrid() {
       pts.push(projectGround(-EXTENT + (2 * EXTENT * i / STEPS), n));
     }
     const dist = Math.abs(n);
-    drawLine(pts, dist < EXTENT * 0.7 ? 0.5 : 0.2);
+    drawLine(pts, dist < EXTENT * 0.5 ? 0.5 : 0.15);
   }
 
   // 南北方向の線
@@ -1144,8 +1147,10 @@ function drawGroundGrid() {
       pts.push(projectGround(e, -EXTENT + (2 * EXTENT * i / STEPS)));
     }
     const dist = Math.abs(e);
-    drawLine(pts, dist < EXTENT * 0.7 ? 0.5 : 0.2);
+    drawLine(pts, dist < EXTENT * 0.5 ? 0.5 : 0.15);
   }
+
+  ctx.restore(); // クリップ解除
 
   gc.style.display = 'block';
 }
@@ -1159,12 +1164,39 @@ function initDragPin() {
   const dragPin = document.getElementById('dragPin');
   const toolbar = dragPin.parentElement;
   const svEl = document.getElementById('streetview');
-  const MIN_PITCH = -5; // 地面スナップの最小pitch角度
+  const MIN_PITCH = -1; // 地面スナップの最小pitch角度（水平線に近い位置まで許可）
   let snappedPov = null;  // 地面にスナップ済みのPOV
+  let placeholder = null; // ツールバーホバー時のゴースト要素
+  const divider = toolbar.querySelector('.divider');
+
+  function isNearToolbar(e) {
+    const tbRect = toolbar.getBoundingClientRect();
+    return e.clientX >= tbRect.left - 20 && e.clientX <= tbRect.right + 20
+        && e.clientY >= tbRect.top - 20 && e.clientY <= tbRect.bottom + 20;
+  }
+
+  function showPlaceholder() {
+    if (placeholder) return;
+    placeholder = dragPin.cloneNode(true);
+    placeholder.removeAttribute('id');
+    placeholder.classList.remove('dragging');
+    placeholder.style.visibility = 'hidden';
+    toolbar.insertBefore(placeholder, divider);
+    divider.style.display = '';
+  }
+
+  function hidePlaceholder() {
+    if (!placeholder) return;
+    placeholder.remove();
+    placeholder = null;
+    divider.style.display = 'none';
+  }
 
   function resetPin() {
+    hidePlaceholder();
+    divider.style.display = '';
     if (dragPin.parentElement !== toolbar) {
-      toolbar.insertBefore(dragPin, toolbar.firstChild);
+      toolbar.insertBefore(dragPin, divider);
     }
     dragPin.style.left = '';
     dragPin.style.top = '';
@@ -1180,9 +1212,13 @@ function initDragPin() {
     isDragging = true;
     dragPin.classList.add('dragging');
 
+    // 選択中の色でピンを更新
+    dragPin.querySelector('.marker-pin').innerHTML = markerSVG(selectedColor);
+
     // toolbar は backdrop-filter/transform を持つため position: fixed の
     // 基準がビューポートにならない。body に移動して正しく固定配置する。
     document.body.appendChild(dragPin);
+    divider.style.display = 'none';
     dragPin.style.left = e.clientX + 'px';
     dragPin.style.top = e.clientY + 'px';
     dragPin.style.transform = 'translate(-50%, -100%)';
@@ -1191,6 +1227,16 @@ function initDragPin() {
 
   document.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
+
+    // ツールバー付近ではプレースホルダーを表示してキャンセル可能を示す
+    if (isNearToolbar(e)) {
+      showPlaceholder();
+      dragPin.style.left = e.clientX + 'px';
+      dragPin.style.top = e.clientY + 'px';
+      snappedPov = null;
+      return;
+    }
+    hidePlaceholder();
 
     const svRect = svEl.getBoundingClientRect();
     const x = e.clientX - svRect.left;
@@ -1209,12 +1255,18 @@ function initDragPin() {
       // スナップ後のPOVをスクリーン座標に変換してピンを配置
       const screenPos = povToPixel(snappedPov, pov, svEl);
       if (screenPos) {
+        // 配置済みピンと同じ距離ベースのスケールを適用
+        const CAM_H = 2.5;
+        const MAX_DIST = 130;
+        const dist = CAM_H / Math.tan(Math.abs(snappedPov.pitch) * Math.PI / 180);
+        const scale = Math.max(0.4, 1 - (dist / MAX_DIST) * 0.6);
         dragPin.style.left = (svRect.left + screenPos.x) + 'px';
         dragPin.style.top = (svRect.top + screenPos.y) + 'px';
+        dragPin.style.transform = `translate(-50%, -100%) scale(${scale})`;
       } else {
-        // 画面外の場合はカーソル位置に追従
         dragPin.style.left = e.clientX + 'px';
         dragPin.style.top = e.clientY + 'px';
+        dragPin.style.transform = 'translate(-50%, -100%)';
         snappedPov = null;
       }
     } else {
@@ -1227,7 +1279,14 @@ function initDragPin() {
   document.addEventListener('mouseup', (e) => {
     if (!isDragging) return;
 
-    if (snappedPov) {
+    // ツールバー付近にドロップ → キャンセル（トーストなし）
+    const tbRect = toolbar.getBoundingClientRect();
+    const onToolbar = e.clientX >= tbRect.left && e.clientX <= tbRect.right
+                   && e.clientY >= tbRect.top - 20 && e.clientY <= tbRect.bottom + 20;
+
+    if (onToolbar) {
+      // キャンセル — 何もしない
+    } else if (snappedPov) {
       pendingClick = snappedPov;
       openModal();
     } else {
