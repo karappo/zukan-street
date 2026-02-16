@@ -122,12 +122,12 @@
       z-index: 10;
     }
 
-    #gridCanvas {
+    .grid-canvas {
       position: absolute;
       inset: 0;
       pointer-events: none;
       z-index: 5;
-      display: none;
+      visibility: hidden;
     }
   }
 
@@ -563,8 +563,6 @@
   <div class="streetview-wrap">
     <div id="streetview"></div>
     <div id="markerOverlay"></div>
-    <canvas id="gridCanvas"></canvas>
-
     <!-- Floating Toolbar -->
     <div class="toolbar">
       <div id="dragPin">
@@ -629,6 +627,14 @@ let selectedColor = '#ef4444';
 let annotations = [];
 let overlays = [];
 let selectedAnnoId = null;
+
+// ── Three.js grid state ──
+let gridRenderer = null;
+let gridScene = null;
+let gridCamera = null;
+let gridVisible = false;
+let gridPovListener = null;
+let gridZoomListener = null;
 
 // ── Constants ──
 const INITIAL_PANO_ID = 'Dq7hFTpha83NZqC1d4L1IA';
@@ -1061,102 +1067,113 @@ function resetView() {
   panorama.setZoom(1);
 }
 
-// ── Ground grid ──
-function drawGroundGrid() {
-  const gc = document.getElementById('gridCanvas');
+// ── Ground grid (Three.js) ──
+function initGridRenderer() {
+  const svWrap = document.querySelector('.streetview-wrap');
   const svEl = document.getElementById('streetview');
-  const ctx = gc.getContext('2d');
+
+  gridRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  gridRenderer.setPixelRatio(window.devicePixelRatio);
+  gridRenderer.setSize(svEl.offsetWidth, svEl.offsetHeight);
+  gridRenderer.domElement.className = 'grid-canvas';
+  svWrap.appendChild(gridRenderer.domElement);
+
+  // Scene
+  gridScene = new THREE.Scene();
+  gridScene.fog = new THREE.Fog(0x000000, 50, 300);
+
+  // Camera (カメラ高さ = Street View カメラ高さ)
+  gridCamera = new THREE.PerspectiveCamera(60, svEl.offsetWidth / svEl.offsetHeight, 0.1, 500);
+  gridCamera.position.set(0, 2.5, 0);
+
+  // Grid (5m間隔、±300m範囲)
+  const grid = new THREE.GridHelper(600, 120, 0xffffff, 0xffffff);
+  grid.material.opacity = 0.35;
+  grid.material.transparent = true;
+  grid.material.depthWrite = false;
+  gridScene.add(grid);
+
+  // 暗い半透明の地面プレーン
+  const planeGeo = new THREE.PlaneGeometry(800, 800);
+  const planeMat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  const plane = new THREE.Mesh(planeGeo, planeMat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.y = -0.01;
+  gridScene.add(plane);
+}
+
+function syncGridCamera() {
+  const svEl = document.getElementById('streetview');
+  const pov = panorama.getPov();
+  const zoom = panorama.getZoom() || 1;
+  const DEG2RAD = Math.PI / 180;
 
   const w = svEl.offsetWidth;
   const h = svEl.offsetHeight;
-  gc.width = w;
-  gc.height = h;
 
-  const pov = panorama.getPov();
-  const CAM_H = 2.5;
-  const SPACING = 5;    // グリッド間隔 (m)
-  const EXTENT = 300;    // カメラからの最大距離 (m)
-  const STEPS = 60;      // 線の分割数
+  // Google Maps の水平FOV: 180 / 2^zoom
+  const hFovDeg = 180 / Math.pow(2, zoom);
+  const hFovRad = hFovDeg * DEG2RAD;
+  // 水平FOV → 垂直FOV に変換
+  const vFovRad = 2 * Math.atan(Math.tan(hFovRad / 2) * (h / w));
+  const vFovDeg = vFovRad / DEG2RAD;
 
-  // ── 水平線のY座標を計算 ──
-  // pitch=0 の複数方向でスクリーン座標を求め、最小Yを水平線とする
-  let horizonY = h;
-  for (let hd = 0; hd < 360; hd += 10) {
-    const pos = povToPixel({ heading: hd, pitch: 0 }, pov, svEl);
-    if (pos && pos.y < horizonY) horizonY = pos.y;
-  }
+  gridCamera.fov = vFovDeg;
+  gridCamera.aspect = w / h;
+  gridCamera.updateProjectionMatrix();
 
-  // 水平線から下をグラデーションで暗くする
-  const grad = ctx.createLinearGradient(0, horizonY, 0, h);
-  grad.addColorStop(0, 'rgba(0, 0, 0, 0.15)');
-  grad.addColorStop(0.3, 'rgba(0, 0, 0, 0.4)');
-  grad.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, horizonY, w, h - horizonY);
+  // Euler order: Y(heading) → X(pitch)
+  gridCamera.rotation.order = 'YXZ';
+  gridCamera.rotation.y = -pov.heading * DEG2RAD;  // 時計回り→反時計回り
+  gridCamera.rotation.x = pov.pitch * DEG2RAD;     // 上向きが正
 
-  // 水平線でクリップ — グリッド線が暗いレイヤーの上にはみ出さない
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, horizonY, w, h - horizonY);
-  ctx.clip();
+  // レンダラーサイズ更新
+  gridRenderer.setSize(w, h);
+}
 
-  // ── 地面上の点をスクリーン座標に投影 ──
-  function projectGround(east, north) {
-    const dist = Math.sqrt(east * east + north * north);
-    if (dist < 0.5) return null;
-    const heading = (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
-    const pitch = -Math.atan2(CAM_H, dist) * 180 / Math.PI;
-    return povToPixel({ heading, pitch }, pov, svEl);
-  }
+function showGroundGrid() {
+  if (!gridRenderer) initGridRenderer();
 
-  function drawLine(pts, alpha) {
-    ctx.beginPath();
-    let started = false;
-    for (const p of pts) {
-      if (p) {
-        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
-        else ctx.lineTo(p.x, p.y);
-      } else {
-        started = false;
-      }
-    }
-    // グロー
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.25})`;
-    ctx.stroke();
-    // メイン線
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-    ctx.stroke();
-  }
+  gridRenderer.domElement.style.visibility = 'visible';
+  gridVisible = true;
 
-  // 東西方向の線
-  for (let n = -EXTENT; n <= EXTENT; n += SPACING) {
-    const pts = [];
-    for (let i = 0; i <= STEPS; i++) {
-      pts.push(projectGround(-EXTENT + (2 * EXTENT * i / STEPS), n));
-    }
-    const dist = Math.abs(n);
-    drawLine(pts, dist < EXTENT * 0.5 ? 0.5 : 0.15);
-  }
+  syncGridCamera();
+  gridRenderer.render(gridScene, gridCamera);
 
-  // 南北方向の線
-  for (let e = -EXTENT; e <= EXTENT; e += SPACING) {
-    const pts = [];
-    for (let i = 0; i <= STEPS; i++) {
-      pts.push(projectGround(e, -EXTENT + (2 * EXTENT * i / STEPS)));
-    }
-    const dist = Math.abs(e);
-    drawLine(pts, dist < EXTENT * 0.5 ? 0.5 : 0.15);
-  }
-
-  ctx.restore(); // クリップ解除
-
-  gc.style.display = 'block';
+  // ドラッグ中のパン追従リスナー
+  gridPovListener = panorama.addListener('pov_changed', () => {
+    if (!gridVisible) return;
+    syncGridCamera();
+    gridRenderer.render(gridScene, gridCamera);
+  });
+  gridZoomListener = panorama.addListener('zoom_changed', () => {
+    if (!gridVisible) return;
+    syncGridCamera();
+    gridRenderer.render(gridScene, gridCamera);
+  });
 }
 
 function hideGroundGrid() {
-  document.getElementById('gridCanvas').style.display = 'none';
+  if (!gridRenderer) return;
+
+  gridRenderer.domElement.style.visibility = 'hidden';
+  gridVisible = false;
+
+  // 個別にリスナー解除（既存の renderOverlays リスナーを保護）
+  if (gridPovListener) {
+    google.maps.event.removeListener(gridPovListener);
+    gridPovListener = null;
+  }
+  if (gridZoomListener) {
+    google.maps.event.removeListener(gridZoomListener);
+    gridZoomListener = null;
+  }
 }
 
 // ── Drag pin ──
@@ -1222,7 +1239,7 @@ function initDragPin() {
     dragPin.style.left = e.clientX + 'px';
     dragPin.style.top = e.clientY + 'px';
     dragPin.style.transform = 'translate(-50%, -100%)';
-    drawGroundGrid();
+    showGroundGrid();
   });
 
   document.addEventListener('mousemove', (e) => {
@@ -1340,11 +1357,27 @@ function initMap() {
   });
 
   initDragPin();
+  initGridRenderer();
+
+  // リサイズ時にレンダラーサイズとカメラアスペクト比を更新
+  window.addEventListener('resize', () => {
+    if (!gridRenderer) return;
+    const svEl = document.getElementById('streetview');
+    const w = svEl.offsetWidth;
+    const h = svEl.offsetHeight;
+    gridRenderer.setSize(w, h);
+    gridCamera.aspect = w / h;
+    gridCamera.updateProjectionMatrix();
+    if (gridVisible) {
+      gridRenderer.render(gridScene, gridCamera);
+    }
+  });
 }
 
 // Load the API
 window.initMap = initMap;
 </script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAbT3YdIiNeYf7Jja0d2nttWy4rZhPoKKE&callback=initMap" async defer></script>
 
 </body>
