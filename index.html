@@ -628,6 +628,11 @@ let annotations = [];
 let overlays = [];
 let selectedAnnoId = null;
 
+// ── Pano transition state ──
+let currentPanoId = null;
+let panoTransitionTimer = null;
+let overlaysHidden = false;
+
 // ── Three.js grid state ──
 let gridRenderer = null;
 let gridScene = null;
@@ -862,6 +867,9 @@ function renderOverlays() {
   const canvas = document.getElementById('streetview');
   const pov = panorama.getPov();
   const panoPos = panorama.getPosition();
+
+  // パノラマ移動中はオーバーレイを非表示のままにする
+  if (overlaysHidden) return;
 
   // Hide all first
   overlays.forEach(ov => ov.el.style.display = 'none');
@@ -1359,17 +1367,34 @@ function initMap() {
   annotations = [...demoAnnotations];
   renderSidebar();
 
-  // Re-render overlays on POV / zoom / pano change
+  // Re-render overlays on POV / zoom change
   panorama.addListener('pov_changed', renderOverlays);
   panorama.addListener('zoom_changed', renderOverlays);
   panorama.addListener('resize', renderOverlays);
-  // マーカーは #markerOverlay 内にあり Google Maps の DOM 管理外のため、
-  // パノラマ変更時にマーカーの破棄・再生成は不要
-  panorama.addListener('pano_changed', renderOverlays);
-  panorama.addListener('position_changed', renderOverlays);
+
+  // パノラマ移動時: 即座にオーバーレイを隠し、移動完了後に再表示
+  panorama.addListener('pano_changed', () => {
+    const newPanoId = panorama.getPano();
+    if (currentPanoId && newPanoId !== currentPanoId) {
+      // 移動開始: オーバーレイを即非表示
+      overlaysHidden = true;
+      overlays.forEach(ov => ov.el.style.display = 'none');
+      if (panoTransitionTimer) clearTimeout(panoTransitionTimer);
+      panoTransitionTimer = setTimeout(() => {
+        overlaysHidden = false;
+        renderOverlays();
+        panoTransitionTimer = null;
+      }, 600);
+    }
+    currentPanoId = newPanoId;
+  });
+  panorama.addListener('position_changed', () => {
+    if (!overlaysHidden) renderOverlays();
+  });
 
   // パノラマ位置が確定したらデモアノテーションに originLat/originLng を設定
   google.maps.event.addListenerOnce(panorama, 'pano_changed', () => {
+    currentPanoId = panorama.getPano();
     const initPos = panorama.getPosition();
     if (initPos) {
       annotations.forEach(a => {
