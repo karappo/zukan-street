@@ -73,12 +73,14 @@ let currentPanoId: string | null = null
 let panoTransitionTimer: ReturnType<typeof setTimeout> | null = null
 const panoStateVersion = ref(0)
 let draggingDraft = false
+let panoramaMouseDownPos: { x: number; y: number } | null = null
+const PANORAMA_DRAG_THRESHOLD_PX = 6
 
 // Drag color
-const currentDragColor = ref('#ef4444')
+const currentDragColor = ref('red')
 
 // ── マーカーデータの計算 ──
-const PIN_HEIGHT = 40
+const PIN_HEIGHT = 14
 const REAL_HEIGHT = 1
 const MIN_PX = 2
 
@@ -211,12 +213,7 @@ onMounted(async () => {
     panoStateVersion.value++
     const newPanoId = pano.getPano()
     if (currentPanoId && newPanoId !== currentPanoId) {
-      overlaysHidden.value = true
-      if (panoTransitionTimer) clearTimeout(panoTransitionTimer)
-      panoTransitionTimer = setTimeout(() => {
-        overlaysHidden.value = false
-        panoTransitionTimer = null
-      }, 600)
+      hideOverlaysTemporarily()
     }
     currentPanoId = newPanoId
   })
@@ -307,7 +304,7 @@ function handleHideGrid() {
 }
 
 function handleDrop(pov: Pov) {
-  currentDragColor.value = '#ef4444'
+  currentDragColor.value = 'red'
   emit('openComposer', { pov, color: currentDragColor.value })
 }
 
@@ -342,15 +339,25 @@ async function waitForViewportReady() {
 
 onMounted(() => {
   if (!svRef.value) return
+  svRef.value.addEventListener('mousedown', handlePanoramaMouseDown, true)
   svRef.value.addEventListener('click', handlePanoramaClick, true)
 })
 
 onUnmounted(() => {
+  svRef.value?.removeEventListener('mousedown', handlePanoramaMouseDown, true)
   svRef.value?.removeEventListener('click', handlePanoramaClick, true)
 })
 
+function handlePanoramaMouseDown(e: MouseEvent) {
+  panoramaMouseDownPos = { x: e.clientX, y: e.clientY }
+}
+
 function handlePanoramaClick(e: MouseEvent) {
-  if (!props.repositioningPinId) return
+  if (isPanoramaDragClick(e)) return
+  if (!props.repositioningPinId) {
+    hideOverlaysTemporarily()
+    return
+  }
   if (!svRef.value || !panorama.value) return
   const rect = svRef.value.getBoundingClientRect()
   const x = e.clientX - rect.left
@@ -365,6 +372,23 @@ function handlePanoramaClick(e: MouseEvent) {
     currentZoom.value,
   )
   emit('repositionPin', { id: props.repositioningPinId, pov })
+}
+
+function isPanoramaDragClick(e: MouseEvent) {
+  if (!panoramaMouseDownPos) return false
+  const dx = e.clientX - panoramaMouseDownPos.x
+  const dy = e.clientY - panoramaMouseDownPos.y
+  panoramaMouseDownPos = null
+  return (dx * dx + dy * dy) > (PANORAMA_DRAG_THRESHOLD_PX * PANORAMA_DRAG_THRESHOLD_PX)
+}
+
+function hideOverlaysTemporarily() {
+  overlaysHidden.value = true
+  if (panoTransitionTimer) clearTimeout(panoTransitionTimer)
+  panoTransitionTimer = setTimeout(() => {
+    overlaysHidden.value = false
+    panoTransitionTimer = null
+  }, 600)
 }
 
 function handleMarkerDragStart(marker: MarkerDatum, e: MouseEvent) {
@@ -398,7 +422,7 @@ function handleDraftMouseMove(e: MouseEvent) {
   }
   emit('updateDraftPosition', {
     pov: snappedPov,
-    color: draftPosition.value?.color || '#ef4444',
+    color: draftPosition.value?.color || 'red',
   })
 }
 
