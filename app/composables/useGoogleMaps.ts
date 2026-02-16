@@ -2,13 +2,12 @@ import type { Pov } from '~/utils/geometry'
 
 const INITIAL_PANO_ID = 'Dq7hFTpha83NZqC1d4L1IA'
 const INITIAL_POV: Pov = { heading: 321.56, pitch: 0.13 }
+const panorama = shallowRef<google.maps.StreetViewPanorama | null>(null)
+const currentPov = ref<Pov>({ heading: 0, pitch: 0 })
+const currentZoom = ref(1)
+const isApiLoaded = ref(false)
 
 export function useGoogleMaps() {
-  const panorama = shallowRef<google.maps.StreetViewPanorama | null>(null)
-  const currentPov = ref<Pov>({ heading: 0, pitch: 0 })
-  const currentZoom = ref(1)
-  const isApiLoaded = ref(false)
-
   function loadApi(apiKey: string): Promise<void> {
     return new Promise((resolve) => {
       if (window.google?.maps) {
@@ -46,6 +45,10 @@ export function useGoogleMaps() {
     })
 
     panorama.value = pano
+    // 初期表示時にもオーバーレイ計算が正しい値を使えるように同期する
+    const initialPov = pano.getPov()
+    currentPov.value = { heading: initialPov.heading, pitch: initialPov.pitch }
+    currentZoom.value = pano.getZoom() || 1
 
     pano.addListener('pov_changed', () => {
       const pov = pano.getPov()

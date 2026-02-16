@@ -22,10 +22,21 @@ export function useThreeGrid() {
   async function initGridRenderer(container: HTMLElement, width: number, height: number) {
     const T = await ensureThree()
 
+    if (getComputedStyle(container).position === 'static') {
+      container.style.position = 'relative'
+    }
+
     gridRenderer = new T.WebGLRenderer({ alpha: true, antialias: true })
     gridRenderer.setPixelRatio(window.devicePixelRatio)
     gridRenderer.setSize(width, height)
     gridRenderer.domElement.className = 'grid-canvas'
+    Object.assign(gridRenderer.domElement.style, {
+      position: 'absolute',
+      inset: '0',
+      pointerEvents: 'none',
+      zIndex: '5',
+      visibility: 'hidden',
+    })
     container.appendChild(gridRenderer.domElement)
     gridCanvas.value = gridRenderer.domElement
 

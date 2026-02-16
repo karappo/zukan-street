@@ -57,10 +57,13 @@ const { annotations, selectedAnnoId, overlaysHidden, setOriginForAll } = useAnno
 
 // Three.js Grid
 const threeGrid = useThreeGrid()
+const viewport = ref({ w: 0, h: 0 })
+let resizeObserver: ResizeObserver | null = null
 
 // Pano transition
 let currentPanoId: string | null = null
 let panoTransitionTimer: ReturnType<typeof setTimeout> | null = null
+const panoStateVersion = ref(0)
 
 // Drag color
 const currentDragColor = ref('#ef4444')
@@ -80,21 +83,40 @@ interface MarkerDatum {
 }
 
 const markerData = computed<MarkerDatum[]>(() => {
+  void panoStateVersion.value
   if (overlaysHidden.value || !panorama.value) return []
 
-  const panoPos = panorama.value.getPosition()
-  if (!panoPos) return []
-
-  const panoLat = panoPos.lat()
-  const panoLng = panoPos.lng()
   const pov = currentPov.value
   const zoom = currentZoom.value
 
-  const el = svRef.value
-  if (!el) return []
+  const w = viewport.value.w
+  const h = viewport.value.h
+  if (w <= 0 || h <= 0) return []
 
-  const w = el.offsetWidth
-  const h = el.offsetHeight
+  const panoPos = panorama.value.getPosition()
+  if (!panoPos) {
+    return annotations.value.map((anno) => {
+      const pos = povToPixel(
+        { heading: anno.heading, pitch: anno.pitch },
+        pov,
+        w,
+        h,
+        zoom,
+      )
+      return {
+        id: anno.id,
+        position: pos,
+        scale: 1,
+        opacity: pos ? 1 : 0,
+        color: anno.color,
+        title: anno.title,
+      }
+    })
+  }
+
+  const panoLat = panoPos.lat()
+  const panoLng = panoPos.lng()
+
   const dV = computeDV(w, h, zoom)
   const MAX_DISTANCE = REAL_HEIGHT * dV / MIN_PX
   const FADE_START = MAX_DISTANCE * 0.6
@@ -128,10 +150,12 @@ onMounted(async () => {
   await loadApi(config.public.googleMapsApiKey)
 
   if (!svRef.value) return
+  await waitForViewportReady()
   const pano = initPanorama(svRef.value)
 
   // パノラマ移動時: オーバーレイを隠し、移動完了後に再表示
   pano.addListener('pano_changed', () => {
+    panoStateVersion.value++
     const newPanoId = pano.getPano()
     if (currentPanoId && newPanoId !== currentPanoId) {
       overlaysHidden.value = true
@@ -146,47 +170,67 @@ onMounted(async () => {
 
   // 初回位置確定時にデモアノテーションのoriginを設定
   google.maps.event.addListenerOnce(pano, 'pano_changed', () => {
+    panoStateVersion.value++
     currentPanoId = pano.getPano()
     const initPos = pano.getPosition()
     if (initPos) {
       setOriginForAll(initPos.lat(), initPos.lng())
     }
   })
+  pano.addListener('position_changed', () => {
+    panoStateVersion.value++
+  })
 
   // Three.js Grid 初期化
   await threeGrid.initGridRenderer(
-    svRef.value.parentElement!,
-    svRef.value.offsetWidth,
-    svRef.value.offsetHeight,
+    svRef.value.parentElement || svRef.value,
+    Math.max(viewport.value.w, 1),
+    Math.max(viewport.value.h, 1),
   )
 
   // グリッドのPOV/ズーム同期
   pano.addListener('pov_changed', () => {
     if (!threeGrid.gridVisible.value) return
-    threeGrid.syncGridCamera(currentPov.value, currentZoom.value, svRef.value!.offsetWidth, svRef.value!.offsetHeight)
+    if (viewport.value.w <= 0 || viewport.value.h <= 0) return
+    threeGrid.syncGridCamera(currentPov.value, currentZoom.value, viewport.value.w, viewport.value.h)
     threeGrid.renderGrid()
   })
   pano.addListener('zoom_changed', () => {
     if (!threeGrid.gridVisible.value) return
-    threeGrid.syncGridCamera(currentPov.value, currentZoom.value, svRef.value!.offsetWidth, svRef.value!.offsetHeight)
+    if (viewport.value.w <= 0 || viewport.value.h <= 0) return
+    threeGrid.syncGridCamera(currentPov.value, currentZoom.value, viewport.value.w, viewport.value.h)
     threeGrid.renderGrid()
   })
 
-  // リサイズ
+  if (window.ResizeObserver) {
+    resizeObserver = new ResizeObserver(() => {
+      syncViewportSize()
+      if (viewport.value.w <= 0 || viewport.value.h <= 0) return
+      threeGrid.resizeGrid(viewport.value.w, viewport.value.h)
+      if (threeGrid.gridVisible.value) {
+        threeGrid.syncGridCamera(currentPov.value, currentZoom.value, viewport.value.w, viewport.value.h)
+        threeGrid.renderGrid()
+      }
+    })
+    resizeObserver.observe(svRef.value)
+  }
+
+  // リサイズフォールバック
   window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  resizeObserver?.disconnect()
+  resizeObserver = null
   threeGrid.disposeGrid()
   if (panoTransitionTimer) clearTimeout(panoTransitionTimer)
 })
 
 function handleResize() {
-  if (!svRef.value) return
-  const w = svRef.value.offsetWidth
-  const h = svRef.value.offsetHeight
-  threeGrid.resizeGrid(w, h)
+  syncViewportSize()
+  if (viewport.value.w <= 0 || viewport.value.h <= 0) return
+  threeGrid.resizeGrid(viewport.value.w, viewport.value.h)
 }
 
 function handleSelectAnnotation(id: string) {
@@ -194,12 +238,12 @@ function handleSelectAnnotation(id: string) {
 }
 
 function handleShowGrid() {
-  if (!svRef.value) return
+  if (viewport.value.w <= 0 || viewport.value.h <= 0) return
   threeGrid.showGroundGrid(
     currentPov.value,
     currentZoom.value,
-    svRef.value.offsetWidth,
-    svRef.value.offsetHeight,
+    viewport.value.w,
+    viewport.value.h,
   )
 }
 
@@ -222,16 +266,36 @@ function lookAtAnnotation(anno: Annotation) {
 }
 
 defineExpose({ lookAtAnnotation })
+
+function syncViewportSize() {
+  if (!svRef.value) return
+  const rect = svRef.value.getBoundingClientRect()
+  viewport.value = {
+    w: Math.round(rect.width),
+    h: Math.round(rect.height),
+  }
+}
+
+async function waitForViewportReady() {
+  for (let i = 0; i < 30; i++) {
+    await nextTick()
+    syncViewportSize()
+    if (viewport.value.w > 0 && viewport.value.h > 0) return
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+  }
+}
 </script>
 
 <style scoped>
 .streetview-wrap {
   flex: 1;
   position: relative;
+  isolation: isolate;
 
   .streetview-pano {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
   }
 
   .marker-overlay {
@@ -239,7 +303,7 @@ defineExpose({ lookAtAnnotation })
     inset: 0;
     pointer-events: none;
     overflow: hidden;
-    z-index: 10;
+    z-index: 20;
   }
 
   :deep(.grid-canvas) {
