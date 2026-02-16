@@ -30,7 +30,8 @@ defineEmits<{
 
 <style scoped>
 .sidebar {
-  width: 320px;
+  width: 100%;
+  height: 100%;
   background: var(--surface);
   border-left: 1px solid var(--border);
   display: flex;

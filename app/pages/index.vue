@@ -1,20 +1,23 @@
 <template>
   <div class="app-layout">
-    <AppHeader />
-    <div class="main">
-      <ClientOnly>
-        <StreetViewContainer
-          ref="svContainer"
+    <Splitpanes class="main default-theme" @resize="handleSplitResize">
+      <Pane class="pane-panorama" size="72" min-size="55">
+        <ClientOnly>
+          <StreetViewContainer
+            ref="svContainer"
+            @select-annotation="handleSelectAnnotation"
+            @open-modal="handleOpenModal"
+          />
+        </ClientOnly>
+      </Pane>
+      <Pane class="pane-sidebar" size="28" min-size="20">
+        <AnnotationSidebar
+          :annotations="annotations"
+          :selected-anno-id="selectedAnnoId"
           @select-annotation="handleSelectAnnotation"
-          @open-modal="handleOpenModal"
         />
-      </ClientOnly>
-      <AnnotationSidebar
-        :annotations="annotations"
-        :selected-anno-id="selectedAnnoId"
-        @select-annotation="handleSelectAnnotation"
-      />
-    </div>
+      </Pane>
+    </Splitpanes>
     <AnnotationModal
       v-model:open="modalOpen"
       @save="handleSaveAnnotation"
@@ -87,6 +90,10 @@ function handleSaveAnnotation(formData: { title: string; desc: string; color: st
   showToast('ピンを追加しました')
   pendingDrop = null
 }
+
+function handleSplitResize() {
+  window.dispatchEvent(new Event('resize'))
+}
 </script>
 
 <style scoped>
@@ -99,8 +106,26 @@ function handleSaveAnnotation(formData: { title: string; desc: string; color: st
 
 .main {
   flex: 1;
-  display: flex;
   overflow: hidden;
-  position: relative;
+  height: 100%;
+}
+
+.main :deep(.splitpanes__splitter) {
+  background: var(--border);
+  border-left: 0;
+  border-right: 0;
+}
+
+.main :deep(.splitpanes__pane) {
+  transition: none !important;
+}
+
+.pane-panorama {
+  min-width: 0;
+  height: 100%;
+}
+
+.pane-sidebar {
+  min-width: 280px;
 }
 </style>

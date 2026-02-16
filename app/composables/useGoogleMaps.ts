@@ -38,6 +38,7 @@ export function useGoogleMaps() {
       pano: INITIAL_PANO_ID,
       pov: INITIAL_POV,
       zoom: 1,
+      fullscreenControl: false,
       addressControl: false,
       showRoadLabels: false,
       motionTracking: false,
