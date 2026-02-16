@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Street View アノテーション デモ — YCAM</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface-hover: #242836;
+    --border: #2a2e3a;
+    --text: #e8e9ed;
+    --text-muted: #8b8fa3;
+    --accent: #5b8af5;
+    --accent-glow: rgba(91, 138, 245, 0.25);
+    --pin-red: #ef4444;
+    --pin-blue: #3b82f6;
+    --pin-green: #22c55e;
+    --pin-yellow: #eab308;
+    --pin-purple: #a855f7;
+    --radius: 10px;
+    --font-ja: 'Noto Sans JP', sans-serif;
+    --font-en: 'DM Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-ja);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .logo {
+        width: 32px;
+        height: 32px;
+        background: var(--accent);
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        font-family: var(--font-en);
+        font-weight: 700;
+        font-size: 14px;
+        color: #fff;
+      }
+
+      h1 {
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+
+        span {
+          color: var(--text-muted);
+          font-weight: 400;
+          margin-left: 8px;
+          font-size: 13px;
+        }
+      }
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .badge {
+        font-size: 11px;
+        font-weight: 500;
+        padding: 4px 10px;
+        border-radius: 20px;
+        background: var(--accent-glow);
+        color: var(--accent);
+        font-family: var(--font-en);
+      }
+    }
+  }
+
+  /* ── Main layout ── */
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Street View container ── */
+  .streetview-wrap {
+    flex: 1;
+    position: relative;
+
+    #streetview {
+      width: 100%;
+      height: 100%;
+    }
+  }
+
+  /* ── Toolbar (floating) ── */
+  .toolbar {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    background: rgba(26, 29, 39, 0.92);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    z-index: 50;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+
+    .tool-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: none;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-ja);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+
+      &:hover {
+        background: var(--surface-hover);
+        color: var(--text);
+      }
+
+      &.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      svg {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+    }
+
+    .divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 320px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      h2 {
+        font-size: 14px;
+        font-weight: 700;
+
+        .count {
+          color: var(--text-muted);
+          font-weight: 400;
+          margin-left: 6px;
+        }
+      }
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+
+      &::-webkit-scrollbar {
+        width: 4px;
+      }
+      &::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 2px;
+      }
+    }
+  }
+
+  /* ── Annotation card ── */
+  .anno-card {
+    padding: 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+
+    &:hover {
+      background: var(--surface-hover);
+      border-color: var(--border);
+    }
+
+    &.selected {
+      background: var(--surface-hover);
+      border-color: var(--accent);
+    }
+
+    .anno-card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+
+      .pin-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 4px;
+      }
+
+      .anno-info {
+        flex: 1;
+        min-width: 0;
+
+        .anno-title {
+          font-size: 13px;
+          font-weight: 500;
+          margin-bottom: 4px;
+          line-height: 1.4;
+        }
+
+        .anno-meta {
+          font-size: 11px;
+          color: var(--text-muted);
+          font-family: var(--font-en);
+        }
+      }
+    }
+
+    .anno-desc {
+      margin-top: 8px;
+      padding-left: 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+  }
+
+  /* ── Custom overlay marker in Street View ── */
+  .sv-marker {
+    position: absolute;
+    cursor: pointer;
+    transform: translate(-50%, -100%);
+    transition: transform 0.15s ease;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+    z-index: 10;
+
+    &:hover {
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6));
+      z-index: 20;
+    }
+
+    .marker-pin {
+      width: 32px;
+      height: 40px;
+      position: relative;
+
+      svg {
+        width: 100%;
+        height: 100%;
+      }
+    }
+
+    .marker-label {
+      position: absolute;
+      top: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(26, 29, 39, 0.92);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s, top 0.15s;
+    }
+
+    &:hover .marker-label {
+      opacity: 1;
+      top: -34px;
+    }
+  }
+
+  /* ── Modal for adding annotation ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    display: none;
+    place-items: center;
+
+    &.show {
+      display: grid;
+    }
+  }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+
+      label {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+
+      input, textarea {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-family: var(--font-ja);
+        font-size: 13px;
+        outline: none;
+        transition: border-color 0.15s;
+
+        &:focus {
+          border-color: var(--accent);
+        }
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 72px;
+      }
+    }
+
+    .color-picker {
+      display: flex;
+      gap: 8px;
+
+      .color-opt {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        transition: all 0.15s;
+
+        &.selected {
+          border-color: #fff;
+          transform: scale(1.15);
+        }
+      }
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+
+      button {
+        padding: 8px 18px;
+        border: none;
+        border-radius: 8px;
+        font-family: var(--font-ja);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .btn-cancel {
+        background: var(--bg);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+
+        &:hover { color: var(--text); }
+      }
+
+      .btn-save {
+        background: var(--accent);
+        color: #fff;
+
+        &:hover { background: #4a7ae4; }
+      }
+    }
+  }
+
+  /* ── Click capture overlay for pin mode ── */
+  .click-capture {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    cursor: crosshair;
+    display: none;
+  }
+
+  .pin-mode .click-capture {
+    display: block;
+  }
+
+  /* ── Crosshair when in pin mode ── */
+  .pin-mode #streetview {
+    cursor: crosshair;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    z-index: 300;
+    opacity: 0;
+    transition: all 0.3s;
+    pointer-events: none;
+
+    &.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">SV</div>
+    <h1>Street View アノテーション<span>YCAM周辺</span></h1>
+  </div>
+  <div class="header-right">
+    <div class="badge">DEMO</div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main" id="mainArea">
+  <!-- Street View -->
+  <div class="streetview-wrap">
+    <div id="streetview"></div>
+    <div class="click-capture" id="clickCapture"></div>
+
+    <!-- Floating Toolbar -->
+    <div class="toolbar">
+      <button class="tool-btn" id="btnPinMode" onclick="togglePinMode()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        ピンを追加
+      </button>
+      <div class="divider"></div>
+      <button class="tool-btn" onclick="resetView()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        初期位置に戻る
+      </button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>アノテーション<span class="count" id="annoCount">(0)</span></h2>
+    </div>
+    <div class="sidebar-content" id="annoList"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3>📌 アノテーションを追加</h3>
+    <div class="form-group">
+      <label>タイトル</label>
+      <input type="text" id="annoTitle" placeholder="例：YCAMの入口">
+    </div>
+    <div class="form-group">
+      <label>説明</label>
+      <textarea id="annoDesc" placeholder="気づいたことやメモを入力..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>ピンの色</label>
+      <div class="color-picker" id="colorPicker">
+        <div class="color-opt selected" data-color="#ef4444" style="background:#ef4444"></div>
+        <div class="color-opt" data-color="#3b82f6" style="background:#3b82f6"></div>
+        <div class="color-opt" data-color="#22c55e" style="background:#22c55e"></div>
+        <div class="color-opt" data-color="#eab308" style="background:#eab308"></div>
+        <div class="color-opt" data-color="#a855f7" style="background:#a855f7"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-save" onclick="saveAnnotation()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──
+let panorama;
+let pinMode = false;
+let pendingClick = null;
+let selectedColor = '#ef4444';
+let annotations = [];
+let overlays = [];
+let selectedAnnoId = null;
+
+// ── Constants ──
+const INITIAL_PANO_ID = 'Dq7hFTpha83NZqC1d4L1IA';
+const EARTH_RADIUS = 6371000; // meters
+
+// ── Initial annotations (demo data) ──
+// Each annotation is bound to a 3D world position (lat, lng, altitude-angle)
+// heading/pitch are relative to the ORIGIN pano, and we store the
+// world-space lat/lng so the pin can be projected from ANY nearby pano.
+const demoAnnotations = [
+  {
+    id: 'demo1',
+    panoId: INITIAL_PANO_ID,
+    lat: 34.16945,
+    lng: 131.46710,
+    heading: 321.5,
+    pitch: 2.0,
+    title: 'YCAM エントランス',
+    desc: '山口情報芸術センターの正面入口。ガラス張りのファサードが特徴的なデザイン。',
+    color: '#3b82f6',
+    author: '田中先生',
+    time: '2分前'
+  },
+  {
+    id: 'demo2',
+    panoId: INITIAL_PANO_ID,
+    lat: 34.16895,
+    lng: 131.46680,
+    heading: 280.0,
+    pitch: 5.0,
+    title: '駐車場入口',
+    desc: '来館者用の駐車場はこちらから。',
+    color: '#22c55e',
+    author: '田中先生',
+    time: '5分前'
+  },
+  {
+    id: 'demo3',
+    panoId: INITIAL_PANO_ID,
+    lat: 34.16935,
+    lng: 131.46725,
+    heading: 350.0,
+    pitch: -3.0,
+    title: '歩道のベンチ',
+    desc: '休憩スペース。天気の良い日は外で休むのに最適。',
+    color: '#eab308',
+    author: '鈴木さん',
+    time: '8分前'
+  },
+  {
+    id: 'demo4',
+    panoId: INITIAL_PANO_ID,
+    lat: 34.16955,
+    lng: 131.46740,
+    heading: 10.0,
+    pitch: 20.0,
+    title: '屋上の設備',
+    desc: '建物上部に設置された空調設備や通信アンテナが見える。',
+    color: '#a855f7',
+    author: '佐藤さん',
+    time: '12分前'
+  },
+  {
+    id: 'demo5',
+    panoId: INITIAL_PANO_ID,
+    lat: 34.16870,
+    lng: 131.46690,
+    heading: 240.0,
+    pitch: 0.0,
+    title: '交差点方向',
+    desc: 'YCAMの南西側。中央公園方面への道路。',
+    color: '#ef4444',
+    author: '田中先生',
+    time: '15分前'
+  }
+];
+
+// ── Compute heading and pitch from one lat/lng to another ──
+function computeBearing(fromLat, fromLng, toLat, toLng) {
+  const DEG2RAD = Math.PI / 180;
+  const RAD2DEG = 180 / Math.PI;
+
+  const lat1 = fromLat * DEG2RAD;
+  const lat2 = toLat * DEG2RAD;
+  const dLng = (toLng - fromLng) * DEG2RAD;
+
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  const bearing = Math.atan2(y, x) * RAD2DEG;
+
+  return (bearing + 360) % 360;
+}
+
+function computeDistance(lat1, lng1, lat2, lng2) {
+  const DEG2RAD = Math.PI / 180;
+  const dLat = (lat2 - lat1) * DEG2RAD;
+  const dLng = (lng2 - lng1) * DEG2RAD;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * DEG2RAD) * Math.cos(lat2 * DEG2RAD) * Math.sin(dLng / 2) ** 2;
+  return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Given current panorama position, compute heading/pitch to an annotation's lat/lng
+// pitch is estimated from the original pitch (since we can't know the real altitude)
+function getAnnotationPov(anno, panoLat, panoLng) {
+  const heading = computeBearing(panoLat, panoLng, anno.lat, anno.lng);
+  const distance = computeDistance(panoLat, panoLng, anno.lat, anno.lng);
+
+  // Estimate pitch: keep the original pitch but adjust slightly based on distance change
+  // For nearby annotations (<100m), this gives a reasonable approximation
+  const pitch = anno.pitch;
+
+  return { heading, pitch };
+}
+
+// ── PanoMarker math (heading/pitch → screen pixel) ──
+function povToPixel(targetPov, currentPov, canvas) {
+  const DEG2RAD = Math.PI / 180;
+
+  // Zoom level → FOV
+  const zoom = panorama.getZoom() || 1;
+  const fov = 180 / Math.pow(2, zoom);
+
+  const w = canvas.offsetWidth;
+  const h = canvas.offsetHeight;
+
+  const hFov = fov * DEG2RAD;
+  const vFov = 2 * Math.atan(Math.tan(hFov / 2) * (h / w));
+
+  const dH = (w / 2) / Math.tan(hFov / 2);
+  const dV = (h / 2) / Math.tan(vFov / 2);
+
+  // Target and current in radians
+  const tH = targetPov.heading * DEG2RAD;
+  const tP = targetPov.pitch * DEG2RAD;
+  const cH = currentPov.heading * DEG2RAD;
+  const cP = currentPov.pitch * DEG2RAD;
+
+  // 3D point on unit sphere for target
+  const tx = Math.cos(tP) * Math.sin(tH - cH);
+  const ty = Math.cos(tP) * Math.cos(tH - cH) * Math.sin(cP) - Math.sin(tP) * Math.cos(cP);
+  const tz = Math.cos(tP) * Math.cos(tH - cH) * Math.cos(cP) + Math.sin(tP) * Math.sin(cP);
+
+  // Behind camera
+  if (tz < 0.01) return null;
+
+  const px = (tx / tz) * dH + w / 2;
+  const py = (ty / tz) * dV + h / 2;
+
+  // Outside viewport
+  if (px < -50 || px > w + 50 || py < -50 || py > h + 50) return null;
+
+  return { x: px, y: py };
+}
+
+// ── Pixel click → heading/pitch ──
+function pixelToPov(x, y, currentPov, canvas) {
+  const DEG2RAD = Math.PI / 180;
+  const RAD2DEG = 180 / Math.PI;
+
+  const zoom = panorama.getZoom() || 1;
+  const fov = 180 / Math.pow(2, zoom);
+
+  const w = canvas.offsetWidth;
+  const h = canvas.offsetHeight;
+
+  const hFov = fov * DEG2RAD;
+  const vFov = 2 * Math.atan(Math.tan(hFov / 2) * (h / w));
+
+  const dH = (w / 2) / Math.tan(hFov / 2);
+
+  const cH = currentPov.heading * DEG2RAD;
+  const cP = currentPov.pitch * DEG2RAD;
+
+  // Normalized screen coords
+  const sx = x - w / 2;
+  const sy = y - h / 2;
+
+  // Direction vector in camera space
+  const vx = sx;
+  const vy = sy;
+  const vz = dH;
+  const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+
+  // Rotate by current POV (inverse camera rotation)
+  const nx = vx / len;
+  const ny = vy / len;
+  const nz = vz / len;
+
+  // Rotate around X axis (pitch)
+  const rx = nx;
+  const ry = ny * Math.cos(cP) + nz * Math.sin(cP);
+  const rz = -ny * Math.sin(cP) + nz * Math.cos(cP);
+
+  // World heading and pitch
+  const heading = (Math.atan2(rx, rz) * RAD2DEG + currentPov.heading + 360) % 360;
+  const pitch = Math.asin(Math.max(-1, Math.min(1, -ry))) * RAD2DEG;
+
+  return { heading, pitch };
+}
+
+// ── Create marker SVG ──
+function markerSVG(color) {
+  return `<svg viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24C32 7.163 24.837 0 16 0z" fill="${color}"/>
+    <circle cx="16" cy="14" r="6" fill="white" fill-opacity="0.9"/>
+  </svg>`;
+}
+
+// ── Render all overlays ──
+function renderOverlays() {
+  const canvas = document.getElementById('streetview');
+  const pov = panorama.getPov();
+  const panoPos = panorama.getPosition();
+
+  // Hide all first
+  overlays.forEach(ov => ov.el.style.display = 'none');
+
+  if (!panoPos) return;
+
+  const panoLat = panoPos.lat();
+  const panoLng = panoPos.lng();
+
+  // Max distance to show annotations (meters)
+  const MAX_DISTANCE = 200;
+
+  annotations.forEach((anno, i) => {
+    // Compute distance from current pano to annotation
+    const distance = computeDistance(panoLat, panoLng, anno.lat, anno.lng);
+
+    // Only show annotations within range
+    if (distance > MAX_DISTANCE) {
+      if (overlays[i]) overlays[i].el.style.display = 'none';
+      return;
+    }
+
+    // Compute heading/pitch from current pano position to annotation world position
+    const annoPov = getAnnotationPov(anno, panoLat, panoLng);
+    const pos = povToPixel({ heading: annoPov.heading, pitch: annoPov.pitch }, pov, canvas);
+
+    if (!overlays[i]) {
+      const el = document.createElement('div');
+      el.className = 'sv-marker';
+      el.innerHTML = `
+        <div class="marker-pin">${markerSVG(anno.color)}</div>
+        <div class="marker-label">${anno.title}</div>
+      `;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectAnnotation(anno.id);
+      });
+      canvas.appendChild(el);
+      overlays[i] = { el };
+    }
+
+    const el = overlays[i].el;
+    el.querySelector('.marker-pin').innerHTML = markerSVG(anno.color);
+    el.querySelector('.marker-label').textContent = anno.title;
+
+    if (pos) {
+      el.style.display = 'block';
+      el.style.left = pos.x + 'px';
+      el.style.top = pos.y + 'px';
+
+      // Scale down markers that are far away
+      const scale = Math.max(0.5, 1 - (distance / MAX_DISTANCE) * 0.5);
+      el.style.transform = `translate(-50%, -100%) scale(${scale})`;
+    } else {
+      el.style.display = 'none';
+    }
+  });
+}
+
+// ── Render sidebar ──
+function renderSidebar() {
+  const list = document.getElementById('annoList');
+  document.getElementById('annoCount').textContent = `(${annotations.length})`;
+
+  list.innerHTML = annotations.map(a => `
+    <div class="anno-card ${selectedAnnoId === a.id ? 'selected' : ''}" onclick="selectAnnotation('${a.id}')">
+      <div class="anno-card-top">
+        <div class="pin-dot" style="background:${a.color}"></div>
+        <div class="anno-info">
+          <div class="anno-title">${a.title}</div>
+          <div class="anno-meta">${a.author} · ${a.time}</div>
+        </div>
+      </div>
+      ${a.desc ? `<div class="anno-desc">${a.desc}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── Select annotation ──
+function selectAnnotation(id) {
+  selectedAnnoId = id;
+  const anno = annotations.find(a => a.id === id);
+  if (anno) {
+    const panoPos = panorama.getPosition();
+    if (panoPos) {
+      const heading = computeBearing(panoPos.lat(), panoPos.lng(), anno.lat, anno.lng);
+      panorama.setPov({ heading, pitch: anno.pitch });
+    }
+  }
+  renderSidebar();
+  renderOverlays();
+}
+
+// ── Pin mode ──
+function togglePinMode() {
+  pinMode = !pinMode;
+  const btn = document.getElementById('btnPinMode');
+  const main = document.getElementById('mainArea');
+
+  if (pinMode) {
+    btn.classList.add('active');
+    main.classList.add('pin-mode');
+    showToast('パノラマ上をクリックしてピンを配置');
+  } else {
+    btn.classList.remove('active');
+    main.classList.remove('pin-mode');
+  }
+}
+
+// ── Modal ──
+function openModal() {
+  document.getElementById('modalOverlay').classList.add('show');
+  document.getElementById('annoTitle').focus();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+  document.getElementById('annoTitle').value = '';
+  document.getElementById('annoDesc').value = '';
+  pendingClick = null;
+}
+
+function saveAnnotation() {
+  if (!pendingClick) return;
+
+  const title = document.getElementById('annoTitle').value.trim() || '無題のピン';
+  const desc = document.getElementById('annoDesc').value.trim();
+
+  const panoPos = panorama.getPosition();
+  const panoLat = panoPos.lat();
+  const panoLng = panoPos.lng();
+
+  // Estimate a world lat/lng for the annotation
+  // Project ~15m in the direction of the heading
+  const ESTIMATED_DISTANCE = 15; // meters
+  const DEG2RAD = Math.PI / 180;
+  const bearing = pendingClick.heading * DEG2RAD;
+  const lat1 = panoLat * DEG2RAD;
+  const lng1 = panoLng * DEG2RAD;
+  const angularDist = ESTIMATED_DISTANCE / EARTH_RADIUS;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDist) +
+    Math.cos(lat1) * Math.sin(angularDist) * Math.cos(bearing)
+  );
+  const lng2 = lng1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(angularDist) * Math.cos(lat1),
+    Math.cos(angularDist) - Math.sin(lat1) * Math.sin(lat2)
+  );
+
+  const anno = {
+    id: 'anno_' + Date.now(),
+    panoId: panorama.getPano(),
+    lat: lat2 / DEG2RAD,
+    lng: lng2 / DEG2RAD,
+    heading: pendingClick.heading,
+    pitch: pendingClick.pitch,
+    title,
+    desc,
+    color: selectedColor,
+    author: 'あなた',
+    time: 'たった今'
+  };
+
+  annotations.push(anno);
+  closeModal();
+  renderSidebar();
+  renderOverlays();
+  showToast('ピンを追加しました');
+
+  // Exit pin mode
+  if (pinMode) togglePinMode();
+}
+
+// ── Toast ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── Color picker ──
+document.getElementById('colorPicker').addEventListener('click', (e) => {
+  const opt = e.target.closest('.color-opt');
+  if (!opt) return;
+  document.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
+  opt.classList.add('selected');
+  selectedColor = opt.dataset.color;
+});
+
+// ── Reset view ──
+function resetView() {
+  panorama.setPov({ heading: 321.56, pitch: 0.13 });
+  panorama.setZoom(1);
+}
+
+// ── Initialize Google Maps ──
+function initMap() {
+  panorama = new google.maps.StreetViewPanorama(
+    document.getElementById('streetview'),
+    {
+      pano: 'Dq7hFTpha83NZqC1d4L1IA',
+      pov: { heading: 321.56, pitch: 0.13 },
+      zoom: 1,
+      addressControl: false,
+      showRoadLabels: false,
+      motionTracking: false,
+      motionTrackingControl: false
+    }
+  );
+
+  // Load demo data
+  annotations = [...demoAnnotations];
+  renderSidebar();
+
+  // Re-render overlays on POV / zoom / pano change
+  panorama.addListener('pov_changed', renderOverlays);
+  panorama.addListener('zoom_changed', renderOverlays);
+  panorama.addListener('resize', renderOverlays);
+  panorama.addListener('pano_changed', () => {
+    // Clear existing overlay elements since pano container resets
+    overlays.forEach(ov => {
+      if (ov.el && ov.el.parentNode) {
+        ov.el.parentNode.removeChild(ov.el);
+      }
+    });
+    overlays = [];
+    setTimeout(renderOverlays, 300);
+  });
+  panorama.addListener('position_changed', () => {
+    overlays.forEach(ov => {
+      if (ov.el && ov.el.parentNode) {
+        ov.el.parentNode.removeChild(ov.el);
+      }
+    });
+    overlays = [];
+    setTimeout(renderOverlays, 300);
+  });
+
+  // Initial render after tiles load
+  google.maps.event.addListenerOnce(panorama, 'pano_changed', () => {
+    setTimeout(renderOverlays, 500);
+  });
+
+  // Click handler for pin mode — uses capture overlay to prevent SV navigation
+  const captureEl = document.getElementById('clickCapture');
+  captureEl.addEventListener('click', (e) => {
+    const svEl = document.getElementById('streetview');
+    const rect = svEl.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const pov = panorama.getPov();
+    const targetPov = pixelToPov(x, y, pov, svEl);
+
+    pendingClick = targetPov;
+    openModal();
+  });
+}
+
+// Load the API
+window.initMap = initMap;
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAbT3YdIiNeYf7Jja0d2nttWy4rZhPoKKE&callback=initMap" async defer></script>
+
+</body>
+</html>
