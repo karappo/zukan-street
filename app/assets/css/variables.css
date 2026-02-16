@@ -1,0 +1,32 @@
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #242836;
+  --border: #2a2e3a;
+  --text: #e8e9ed;
+  --text-muted: #8b8fa3;
+  --accent: #5b8af5;
+  --accent-glow: rgba(91, 138, 245, 0.25);
+  --pin-red: #ef4444;
+  --pin-blue: #3b82f6;
+  --pin-green: #22c55e;
+  --pin-yellow: #eab308;
+  --pin-purple: #a855f7;
+  --radius: 10px;
+  --font-ja: 'Noto Sans JP', sans-serif;
+  --font-en: 'DM Sans', sans-serif;
+}
+
+body {
+  font-family: var(--font-ja);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
