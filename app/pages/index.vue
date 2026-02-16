@@ -5,23 +5,30 @@
         <ClientOnly>
           <StreetViewContainer
             ref="svContainer"
-            @select-annotation="handleSelectAnnotation"
-            @open-modal="handleOpenModal"
+            :repositioning-pin-id="repositioningPinId"
+            @select-pin="handleSelectPin"
+            @open-composer="handleOpenComposer"
+            @reposition-pin="handleRepositionPinCommit"
           />
         </ClientOnly>
       </Pane>
       <Pane class="pane-sidebar" size="28" min-size="20">
-        <AnnotationSidebar
-          :annotations="annotations"
-          :selected-anno-id="selectedAnnoId"
-          @select-annotation="handleSelectAnnotation"
+        <Comments
+          :pins="pins"
+          :selected-pin-id="selectedPinId"
+          :editting-pin-id="edittingPinId"
+          :repositioning-pin-id="repositioningPinId"
+          :draft-position="draftPosition"
+          :composer-initial="composerInitial"
+          @select-pin="handleSelectPin"
+          @edit-pin="handleEditPin"
+          @reposition-pin="handleRepositionPinStart"
+          @delete-pin="handleDeletePin"
+          @save-pin="handleSavePin"
+          @cancel-composer="handleCancelComposer"
         />
       </Pane>
     </Splitpanes>
-    <AnnotationModal
-      v-model:open="modalOpen"
-      @save="handleSaveAnnotation"
-    />
     <AppToast />
   </div>
 </template>
@@ -29,33 +36,49 @@
 <script setup lang="ts">
 import { estimateDistance, destinationPoint } from '~/utils/geometry'
 import type { Pov } from '~/utils/geometry'
-import type { Annotation } from '~/composables/useAnnotations'
+import type { Pin } from '~/composables/usePins'
 
-const { annotations, selectedAnnoId, selectAnnotation, addAnnotation, loadDemoData } = useAnnotations()
+const {
+  pins,
+  selectedPinId,
+  edittingPinId,
+  draftPosition,
+  setSelectedPinId,
+  setEdittingPinId,
+  setDraftPosition,
+  addPin,
+  updatePin,
+  deletePin,
+  loadDemoData,
+} = usePins()
 const { showToast } = useToast()
 
 const svContainer = ref<InstanceType<typeof import('~/components/StreetViewContainer.vue').default> | null>(null)
-const modalOpen = ref(false)
-let pendingDrop: { pov: Pov; color: string } | null = null
+const repositioningPinId = ref<string | null>(null)
+const composerInitial = ref<{ title: string; desc: string; color: string } | null>(null)
 
 // デモデータロード
 loadDemoData()
 
-function handleSelectAnnotation(id: string) {
-  selectAnnotation(id)
-  const anno = annotations.value.find(a => a.id === id)
-  if (anno && svContainer.value) {
-    svContainer.value.lookAtAnnotation(anno)
+function handleSelectPin(id: string) {
+  setSelectedPinId(id)
+  const pin = pins.value.find(a => a.id === id)
+  if (pin && svContainer.value) {
+    svContainer.value.lookAtPin(pin)
   }
 }
 
-function handleOpenModal(data: { pov: Pov; color: string }) {
-  pendingDrop = data
-  modalOpen.value = true
+function handleOpenComposer(data: { pov: Pov; color: string }) {
+  setDraftPosition(data)
+  setEdittingPinId(null)
+  composerInitial.value = {
+    title: '',
+    desc: '',
+    color: data.color,
+  }
 }
 
-function handleSaveAnnotation(formData: { title: string; desc: string; color: string }) {
-  if (!pendingDrop) return
+function handleSavePin(formData: { title: string; desc: string; color: string }) {
   if (!svContainer.value) return
 
   const panorama = useGoogleMaps().panorama.value
@@ -67,18 +90,33 @@ function handleSaveAnnotation(formData: { title: string; desc: string; color: st
   const panoLat = panoPos.lat()
   const panoLng = panoPos.lng()
 
-  const distance = estimateDistance(pendingDrop.pov.pitch)
-  const dest = destinationPoint(panoLat, panoLng, pendingDrop.pov.heading, distance)
+  if (edittingPinId.value) {
+    updatePin(edittingPinId.value, {
+      title: formData.title,
+      desc: formData.desc,
+      color: formData.color,
+      time: 'たった今',
+    })
+    showToast('ピンを更新しました')
+    setEdittingPinId(null)
+    composerInitial.value = null
+    return
+  }
 
-  const anno: Annotation = {
-    id: `anno_${Date.now()}`,
+  if (!draftPosition.value) return
+
+  const distance = estimateDistance(draftPosition.value.pov.pitch)
+  const dest = destinationPoint(panoLat, panoLng, draftPosition.value.pov.heading, distance)
+
+  const pin: Pin = {
+    id: `pin_${Date.now()}`,
     panoId: panorama.getPano(),
     lat: dest.lat,
     lng: dest.lng,
     originLat: panoLat,
     originLng: panoLng,
-    heading: pendingDrop.pov.heading,
-    pitch: pendingDrop.pov.pitch,
+    heading: draftPosition.value.pov.heading,
+    pitch: draftPosition.value.pov.pitch,
     title: formData.title,
     desc: formData.desc,
     color: formData.color,
@@ -86,9 +124,71 @@ function handleSaveAnnotation(formData: { title: string; desc: string; color: st
     time: 'たった今',
   }
 
-  addAnnotation(anno)
+  addPin(pin)
   showToast('ピンを追加しました')
-  pendingDrop = null
+  setDraftPosition(null)
+  composerInitial.value = null
+}
+
+function handleCancelComposer() {
+  setDraftPosition(null)
+  setEdittingPinId(null)
+  composerInitial.value = null
+}
+
+function handleEditPin(id: string) {
+  const pin = pins.value.find(p => p.id === id)
+  if (!pin) return
+  setEdittingPinId(id)
+  setDraftPosition(null)
+  composerInitial.value = {
+    title: pin.title,
+    desc: pin.desc,
+    color: pin.color,
+  }
+  setSelectedPinId(id)
+}
+
+function handleDeletePin(id: string) {
+  if (!confirm('ほんとうに けしてよいですか？')) return
+  deletePin(id)
+  if (repositioningPinId.value === id) {
+    repositioningPinId.value = null
+  }
+  showToast('ピンを削除しました')
+}
+
+function handleRepositionPinStart(id: string) {
+  repositioningPinId.value = id
+  setSelectedPinId(id)
+  const pin = pins.value.find(p => p.id === id)
+  if (pin && svContainer.value) {
+    svContainer.value.lookAtPin(pin)
+  }
+  showToast('パノラマ上をクリックして新しい位置に再配置します')
+}
+
+function handleRepositionPinCommit(data: { id: string; pov: Pov }) {
+  const panorama = useGoogleMaps().panorama.value
+  if (!panorama) return
+  const panoPos = panorama.getPosition()
+  if (!panoPos) return
+  const panoLat = panoPos.lat()
+  const panoLng = panoPos.lng()
+  const distance = estimateDistance(data.pov.pitch)
+  const dest = destinationPoint(panoLat, panoLng, data.pov.heading, distance)
+
+  updatePin(data.id, {
+    lat: dest.lat,
+    lng: dest.lng,
+    originLat: panoLat,
+    originLng: panoLng,
+    heading: data.pov.heading,
+    pitch: data.pov.pitch,
+    time: 'たった今',
+  })
+  repositioningPinId.value = null
+  showToast('ピンを再配置しました')
 }
 
 function handleSplitResize() {

@@ -37,25 +37,27 @@ export function computeDistance(lat1: number, lng1: number, lat2: number, lng2: 
  * 現在のパノラマ位置からアノテーションの lat/lng への heading/pitch を計算する。
  * pitch は距離の変化に応じて再計算される（同じ高さの点を指し続けるため）。
  */
-export function getAnnotationPov(
-  anno: { lat: number; lng: number; pitch: number; originLat?: number | null; originLng?: number | null },
+export function getPinPov(
+  pin: { lat: number; lng: number; pitch: number; originLat?: number | null; originLng?: number | null },
   panoLat: number,
   panoLng: number,
 ): Pov {
-  const heading = computeBearing(panoLat, panoLng, anno.lat, anno.lng)
+  const heading = computeBearing(panoLat, panoLng, pin.lat, pin.lng)
 
-  if (anno.originLat != null && anno.originLng != null) {
-    const d0 = computeDistance(anno.originLat, anno.originLng, anno.lat, anno.lng)
-    const d1 = computeDistance(panoLat, panoLng, anno.lat, anno.lng)
+  if (pin.originLat != null && pin.originLng != null) {
+    const d0 = computeDistance(pin.originLat, pin.originLng, pin.lat, pin.lng)
+    const d1 = computeDistance(panoLat, panoLng, pin.lat, pin.lng)
     if (d0 > 0.1) {
-      const h = d0 * Math.tan(anno.pitch * DEG2RAD)
+      const h = d0 * Math.tan(pin.pitch * DEG2RAD)
       const pitch = Math.atan2(h, d1) * RAD2DEG
       return { heading, pitch }
     }
   }
 
-  return { heading, pitch: anno.pitch }
+  return { heading, pitch: pin.pitch }
 }
+
+export const getAnnotationPov = getPinPov
 
 /**
  * heading/pitch → スクリーンピクセル座標

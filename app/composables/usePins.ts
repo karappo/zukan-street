@@ -1,6 +1,6 @@
 import type { Pov } from '~/utils/geometry'
 
-export interface Annotation {
+export interface Pin {
   id: string
   panoId: string
   lat: number
@@ -16,9 +16,14 @@ export interface Annotation {
   time: string
 }
 
+export interface DraftPosition {
+  pov: Pov
+  color: string
+}
+
 const INITIAL_PANO_ID = 'Dq7hFTpha83NZqC1d4L1IA'
 
-const demoAnnotations: Annotation[] = [
+const demoPins: Pin[] = [
   {
     id: 'demo1',
     panoId: INITIAL_PANO_ID,
@@ -96,25 +101,57 @@ const demoAnnotations: Annotation[] = [
   },
 ]
 
-const annotations = ref<Annotation[]>([])
-const selectedAnnoId = ref<string | null>(null)
+const pins = ref<Pin[]>([])
 const overlaysHidden = ref(false)
+const selectedPinId = ref<string | null>(null)
+const edittingPinId = ref<string | null>(null)
+const draftPosition = ref<DraftPosition | null>(null)
 
-export function useAnnotations() {
+export function usePins() {
   function loadDemoData() {
-    annotations.value = demoAnnotations.map(a => ({ ...a }))
+    pins.value = demoPins.map(a => ({ ...a }))
   }
 
-  function selectAnnotation(id: string) {
-    selectedAnnoId.value = id
+  function setSelectedPinId(id: string | null) {
+    selectedPinId.value = id
   }
 
-  function addAnnotation(anno: Annotation) {
-    annotations.value.push(anno)
+  function setEdittingPinId(id: string | null) {
+    edittingPinId.value = id
+  }
+
+  function setDraftPosition(value: DraftPosition | null) {
+    draftPosition.value = value
+  }
+
+  function addPin(pin: Pin) {
+    pins.value.push(pin)
+  }
+
+  function updatePin(id: string, patch: Partial<Pin>) {
+    const idx = pins.value.findIndex(a => a.id === id)
+    if (idx < 0) return
+    pins.value[idx] = {
+      ...pins.value[idx],
+      ...patch,
+      id: pins.value[idx].id,
+    }
+  }
+
+  function deletePin(id: string) {
+    const idx = pins.value.findIndex(a => a.id === id)
+    if (idx < 0) return
+    pins.value.splice(idx, 1)
+    if (selectedPinId.value === id) {
+      selectedPinId.value = null
+    }
+    if (edittingPinId.value === id) {
+      edittingPinId.value = null
+    }
   }
 
   function setOriginForAll(lat: number, lng: number) {
-    annotations.value.forEach((a) => {
+    pins.value.forEach((a) => {
       if (a.originLat == null) {
         a.originLat = lat
         a.originLng = lng
@@ -123,12 +160,18 @@ export function useAnnotations() {
   }
 
   return {
-    annotations: readonly(annotations),
-    selectedAnnoId,
+    pins: readonly(pins),
     overlaysHidden,
+    selectedPinId,
+    edittingPinId,
+    draftPosition,
     loadDemoData,
-    selectAnnotation,
-    addAnnotation,
+    setSelectedPinId,
+    setEdittingPinId,
+    setDraftPosition,
+    addPin,
+    updatePin,
+    deletePin,
     setOriginForAll,
   }
 }

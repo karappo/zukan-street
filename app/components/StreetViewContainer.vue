@@ -1,5 +1,5 @@
 <template>
-  <div class="streetview-wrap">
+  <div class="streetview-wrap" :class="{ repositioning: Boolean(repositioningPinId) }">
     <div ref="svRef" class="streetview-pano" />
     <div class="marker-overlay">
       <MarkerOverlay
@@ -10,8 +10,8 @@
         :opacity="marker.opacity"
         :color="marker.color"
         :title="marker.title"
-        :is-selected="marker.id === selectedAnnoId"
-        @select="handleSelectAnnotation(marker.id)"
+        :is-selected="marker.id === selectedPinId"
+        @select="handleSelectPin(marker.id)"
       />
     </div>
     <DragPinToolbar
@@ -29,20 +29,25 @@
 
 <script setup lang="ts">
 import {
-  getAnnotationPov,
+  getPinPov,
   computeDistance,
   computeDV,
   povToPixel,
+  pixelToPov,
   estimateDistance,
   destinationPoint,
-  DEG2RAD,
 } from '~/utils/geometry'
 import type { Pov } from '~/utils/geometry'
-import type { Annotation } from '~/composables/useAnnotations'
+import type { Pin } from '~/composables/usePins'
+
+const props = defineProps<{
+  repositioningPinId: string | null
+}>()
 
 const emit = defineEmits<{
-  selectAnnotation: [id: string]
-  openModal: [data: { pov: Pov; color: string }]
+  selectPin: [id: string]
+  openComposer: [data: { pov: Pov; color: string }]
+  repositionPin: [data: { id: string; pov: Pov }]
 }>()
 
 const config = useRuntimeConfig()
@@ -52,8 +57,8 @@ const { showToast } = useToast()
 const svRef = ref<HTMLElement | null>(null)
 const { panorama, currentPov, currentZoom, loadApi, initPanorama, resetView } = useGoogleMaps()
 
-// Annotations
-const { annotations, selectedAnnoId, overlaysHidden, setOriginForAll } = useAnnotations()
+// Pins
+const { pins, selectedPinId, overlaysHidden, setOriginForAll } = usePins()
 
 // Three.js Grid
 const threeGrid = useThreeGrid()
@@ -95,21 +100,21 @@ const markerData = computed<MarkerDatum[]>(() => {
 
   const panoPos = panorama.value.getPosition()
   if (!panoPos) {
-    return annotations.value.map((anno) => {
+    return pins.value.map((pin) => {
       const pos = povToPixel(
-        { heading: anno.heading, pitch: anno.pitch },
+        { heading: pin.heading, pitch: pin.pitch },
         pov,
         w,
         h,
         zoom,
       )
       return {
-        id: anno.id,
+        id: pin.id,
         position: pos,
         scale: 1,
         opacity: pos ? 1 : 0,
-        color: anno.color,
-        title: anno.title,
+        color: pin.color,
+        title: pin.title,
       }
     })
   }
@@ -121,18 +126,18 @@ const markerData = computed<MarkerDatum[]>(() => {
   const MAX_DISTANCE = REAL_HEIGHT * dV / MIN_PX
   const FADE_START = MAX_DISTANCE * 0.6
 
-  return annotations.value.map((anno) => {
-    const distance = computeDistance(panoLat, panoLng, anno.lat, anno.lng)
+  return pins.value.map((pin) => {
+    const distance = computeDistance(panoLat, panoLng, pin.lat, pin.lng)
 
     if (distance > MAX_DISTANCE) {
-      return { id: anno.id, position: null, scale: 1, opacity: 0, color: anno.color, title: anno.title }
+      return { id: pin.id, position: null, scale: 1, opacity: 0, color: pin.color, title: pin.title }
     }
 
-    const annoPov = getAnnotationPov(anno, panoLat, panoLng)
-    const pos = povToPixel(annoPov, pov, w, h, zoom)
+    const pinPov = getPinPov(pin, panoLat, panoLng)
+    const pos = povToPixel(pinPov, pov, w, h, zoom)
 
     if (!pos) {
-      return { id: anno.id, position: null, scale: 1, opacity: 0, color: anno.color, title: anno.title }
+      return { id: pin.id, position: null, scale: 1, opacity: 0, color: pin.color, title: pin.title }
     }
 
     const screenPx = REAL_HEIGHT / Math.max(distance, 0.5) * dV
@@ -141,7 +146,7 @@ const markerData = computed<MarkerDatum[]>(() => {
       ? 1 - (distance - FADE_START) / (MAX_DISTANCE - FADE_START)
       : 1
 
-    return { id: anno.id, position: pos, scale, opacity, color: anno.color, title: anno.title }
+    return { id: pin.id, position: pos, scale, opacity, color: pin.color, title: pin.title }
   })
 })
 
@@ -233,8 +238,8 @@ function handleResize() {
   threeGrid.resizeGrid(viewport.value.w, viewport.value.h)
 }
 
-function handleSelectAnnotation(id: string) {
-  emit('selectAnnotation', id)
+function handleSelectPin(id: string) {
+  emit('selectPin', id)
 }
 
 function handleShowGrid() {
@@ -253,19 +258,19 @@ function handleHideGrid() {
 
 function handleDrop(pov: Pov) {
   currentDragColor.value = '#ef4444'
-  emit('openModal', { pov, color: currentDragColor.value })
+  emit('openComposer', { pov, color: currentDragColor.value })
 }
 
 // 親から呼ばれるカメラ移動メソッド
-function lookAtAnnotation(anno: Annotation) {
+function lookAtPin(pin: Pin) {
   if (!panorama.value) return
   const panoPos = panorama.value.getPosition()
   if (!panoPos) return
-  const pov = getAnnotationPov(anno, panoPos.lat(), panoPos.lng())
+  const pov = getPinPov(pin, panoPos.lat(), panoPos.lng())
   panorama.value.setPov(pov)
 }
 
-defineExpose({ lookAtAnnotation })
+defineExpose({ lookAtPin })
 
 function syncViewportSize() {
   if (!svRef.value) return
@@ -283,6 +288,33 @@ async function waitForViewportReady() {
     if (viewport.value.w > 0 && viewport.value.h > 0) return
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
   }
+}
+
+onMounted(() => {
+  if (!svRef.value) return
+  svRef.value.addEventListener('click', handlePanoramaClick, true)
+})
+
+onUnmounted(() => {
+  svRef.value?.removeEventListener('click', handlePanoramaClick, true)
+})
+
+function handlePanoramaClick(e: MouseEvent) {
+  if (!props.repositioningPinId) return
+  if (!svRef.value || !panorama.value) return
+  const rect = svRef.value.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+  if (x < 0 || x > rect.width || y < 0 || y > rect.height) return
+  const pov = pixelToPov(
+    x,
+    y,
+    currentPov.value,
+    Math.max(rect.width, 1),
+    Math.max(rect.height, 1),
+    currentZoom.value,
+  )
+  emit('repositionPin', { id: props.repositioningPinId, pov })
 }
 </script>
 
@@ -314,6 +346,10 @@ async function waitForViewportReady() {
     pointer-events: none;
     z-index: 5;
     visibility: hidden;
+  }
+
+  &.repositioning {
+    cursor: crosshair;
   }
 }
 </style>
