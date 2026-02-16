@@ -862,14 +862,13 @@ function renderOverlays() {
   const panoLat = panoPos.lat();
   const panoLng = panoPos.lng();
 
-  // Max distance to show annotations (meters)
-  const MAX_DISTANCE = 200;
+  // 距離によるピン表示制御
+  const MAX_DISTANCE = 80;   // これ以上は非表示 (m)
+  const FADE_START = 50;      // フェード開始距離 (m)
 
   annotations.forEach((anno, i) => {
-    // Compute distance from current pano to annotation
     const distance = computeDistance(panoLat, panoLng, anno.lat, anno.lng);
 
-    // Only show annotations within range
     if (distance > MAX_DISTANCE) {
       if (overlays[i]) overlays[i].el.style.display = 'none';
       return;
@@ -903,9 +902,13 @@ function renderOverlays() {
       el.style.left = pos.x + 'px';
       el.style.top = pos.y + 'px';
 
-      // Scale down markers that are far away
-      const scale = Math.max(0.5, 1 - (distance / MAX_DISTANCE) * 0.5);
+      // 距離に応じてスケールとフェードを調整
+      const scale = Math.max(0.4, 1 - (distance / MAX_DISTANCE) * 0.6);
+      const opacity = distance > FADE_START
+        ? 1 - (distance - FADE_START) / (MAX_DISTANCE - FADE_START)
+        : 1;
       el.style.transform = `translate(-50%, -100%) scale(${scale})`;
+      el.style.opacity = opacity;
     } else {
       el.style.display = 'none';
     }
@@ -1057,10 +1060,15 @@ function resetView() {
 // ── Drag pin ──
 function initDragPin() {
   const dragPin = document.getElementById('dragPin');
+  const toolbar = dragPin.parentElement;
   const svEl = document.getElementById('streetview');
   let isValid = false;
 
   function resetPin() {
+    // body から toolbar に戻す
+    if (dragPin.parentElement !== toolbar) {
+      toolbar.insertBefore(dragPin, toolbar.firstChild);
+    }
     dragPin.style.left = '';
     dragPin.style.top = '';
     dragPin.style.transform = '';
@@ -1074,7 +1082,9 @@ function initDragPin() {
     isDragging = true;
     dragPin.classList.add('dragging');
 
-    // position: fixed でツールバーからポップアウト
+    // toolbar は backdrop-filter/transform を持つため position: fixed の
+    // 基準がビューポートにならない。body に移動して正しく固定配置する。
+    document.body.appendChild(dragPin);
     dragPin.style.left = e.clientX + 'px';
     dragPin.style.top = e.clientY + 'px';
     dragPin.style.transform = 'translate(-50%, -100%)';
