@@ -318,7 +318,7 @@
 
     .marker-label {
       position: absolute;
-      top: -8px;
+      bottom: -4px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(26, 29, 39, 0.92);
@@ -331,12 +331,12 @@
       white-space: nowrap;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.15s, top 0.15s;
+      transition: opacity 0.15s, bottom 0.15s;
     }
 
     &:hover .marker-label {
       opacity: 1;
-      top: -34px;
+      bottom: -30px;
     }
   }
 
@@ -932,8 +932,10 @@ function renderOverlays() {
       el.style.display = 'block';
       el.style.left = pos.x + 'px';
       el.style.top = pos.y + 'px';
-      el.style.transform = `translate(-50%, -100%) scale(${scale})`;
+      el.style.transform = 'translate(-50%, -100%)';
       el.style.opacity = opacity;
+      el.querySelector('.marker-pin').style.transform = `scale(${scale})`;
+      el.querySelector('.marker-pin').style.transformOrigin = 'bottom center';
     } else {
       el.style.display = 'none';
     }
@@ -1233,6 +1235,7 @@ function initDragPin() {
     dragPin.style.left = '';
     dragPin.style.top = '';
     dragPin.style.transform = '';
+    dragPin.querySelector('.marker-pin').style.transform = '';
     dragPin.classList.remove('dragging');
     isDragging = false;
     snappedPov = null;
@@ -1300,7 +1303,9 @@ function initDragPin() {
         const scale = (REAL_HEIGHT / Math.max(dist, 0.5) * dVD) / PIN_H;
         dragPin.style.left = (svRect.left + screenPos.x) + 'px';
         dragPin.style.top = (svRect.top + screenPos.y) + 'px';
-        dragPin.style.transform = `translate(-50%, -100%) scale(${scale})`;
+        dragPin.style.transform = 'translate(-50%, -100%)';
+        dragPin.querySelector('.marker-pin').style.transform = `scale(${scale})`;
+        dragPin.querySelector('.marker-pin').style.transformOrigin = 'bottom center';
       } else {
         dragPin.style.left = e.clientX + 'px';
         dragPin.style.top = e.clientY + 'px';
