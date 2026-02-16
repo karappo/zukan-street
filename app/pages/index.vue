@@ -9,6 +9,7 @@
             @select-pin="handleSelectPin"
             @open-composer="handleOpenComposer"
             @reposition-pin="handleRepositionPinCommit"
+            @update-draft-position="handleUpdateDraftPosition"
           />
         </ClientOnly>
       </Pane>
@@ -76,6 +77,11 @@ function handleOpenComposer(data: { pov: Pov; color: string }) {
     desc: '',
     color: data.color,
   }
+}
+
+function handleUpdateDraftPosition(data: { pov: Pov; color: string }) {
+  if (!draftPosition.value) return
+  setDraftPosition(data)
 }
 
 function handleSavePin(formData: { title: string; desc: string; color: string }) {

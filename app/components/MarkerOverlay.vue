@@ -2,13 +2,14 @@
   <div
     v-if="position"
     class="sv-marker"
-    :class="{ selected: isSelected }"
+    :class="{ selected: isSelected, draft: isDraft }"
     :style="{
       left: `${position.x}px`,
       top: `${position.y}px`,
       opacity,
     }"
     @click.stop="$emit('select')"
+    @mousedown.stop="$emit('dragStart', $event)"
   >
     <div
       class="marker-pin"
@@ -32,10 +33,12 @@ defineProps<{
   color: string
   title: string
   isSelected: boolean
+  isDraft?: boolean
 }>()
 
 defineEmits<{
   select: []
+  dragStart: [event: MouseEvent]
 }>()
 </script>
 
@@ -52,6 +55,15 @@ defineEmits<{
   &:hover {
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
     z-index: 20;
+  }
+
+  &.draft {
+    cursor: grab;
+    z-index: 25;
+  }
+
+  &.draft:active {
+    cursor: grabbing;
   }
 
   .marker-pin {

@@ -10,8 +10,10 @@
         :opacity="marker.opacity"
         :color="marker.color"
         :title="marker.title"
-        :is-selected="marker.id === selectedPinId"
+        :is-selected="marker.id === selectedPinId || marker.isDraft"
+        :is-draft="marker.isDraft"
         @select="handleSelectPin(marker.id)"
+        @drag-start="handleMarkerDragStart(marker, $event)"
       />
     </div>
     <DragPinToolbar
@@ -48,6 +50,7 @@ const emit = defineEmits<{
   selectPin: [id: string]
   openComposer: [data: { pov: Pov; color: string }]
   repositionPin: [data: { id: string; pov: Pov }]
+  updateDraftPosition: [data: { pov: Pov; color: string }]
 }>()
 
 const config = useRuntimeConfig()
@@ -58,7 +61,7 @@ const svRef = ref<HTMLElement | null>(null)
 const { panorama, currentPov, currentZoom, loadApi, initPanorama, resetView } = useGoogleMaps()
 
 // Pins
-const { pins, selectedPinId, overlaysHidden, setOriginForAll } = usePins()
+const { pins, selectedPinId, draftPosition, overlaysHidden, setOriginForAll } = usePins()
 
 // Three.js Grid
 const threeGrid = useThreeGrid()
@@ -69,6 +72,7 @@ let resizeObserver: ResizeObserver | null = null
 let currentPanoId: string | null = null
 let panoTransitionTimer: ReturnType<typeof setTimeout> | null = null
 const panoStateVersion = ref(0)
+let draggingDraft = false
 
 // Drag color
 const currentDragColor = ref('#ef4444')
@@ -85,6 +89,7 @@ interface MarkerDatum {
   opacity: number
   color: string
   title: string
+  isDraft?: boolean
 }
 
 const markerData = computed<MarkerDatum[]>(() => {
@@ -100,7 +105,7 @@ const markerData = computed<MarkerDatum[]>(() => {
 
   const panoPos = panorama.value.getPosition()
   if (!panoPos) {
-    return pins.value.map((pin) => {
+    const markers = pins.value.map((pin) => {
       const pos = povToPixel(
         { heading: pin.heading, pitch: pin.pitch },
         pov,
@@ -117,6 +122,25 @@ const markerData = computed<MarkerDatum[]>(() => {
         title: pin.title,
       }
     })
+    if (draftPosition.value) {
+      const draftPos = povToPixel(
+        draftPosition.value.pov,
+        pov,
+        w,
+        h,
+        zoom,
+      )
+      markers.push({
+        id: '__draft__',
+        position: draftPos,
+        scale: 1,
+        opacity: draftPos ? 1 : 0,
+        color: draftPosition.value.color,
+        title: '保存前のピン',
+        isDraft: true,
+      })
+    }
+    return markers
   }
 
   const panoLat = panoPos.lat()
@@ -126,7 +150,7 @@ const markerData = computed<MarkerDatum[]>(() => {
   const MAX_DISTANCE = REAL_HEIGHT * dV / MIN_PX
   const FADE_START = MAX_DISTANCE * 0.6
 
-  return pins.value.map((pin) => {
+  const settledMarkers = pins.value.map((pin) => {
     const distance = computeDistance(panoLat, panoLng, pin.lat, pin.lng)
 
     if (distance > MAX_DISTANCE) {
@@ -148,6 +172,30 @@ const markerData = computed<MarkerDatum[]>(() => {
 
     return { id: pin.id, position: pos, scale, opacity, color: pin.color, title: pin.title }
   })
+
+  if (!draftPosition.value) return settledMarkers
+
+  const draftPos = povToPixel(
+    draftPosition.value.pov,
+    pov,
+    w,
+    h,
+    zoom,
+  )
+  const draftDistance = estimateDistance(draftPosition.value.pov.pitch)
+  const draftScreenPx = REAL_HEIGHT / Math.max(draftDistance, 0.5) * dV
+  const draftScale = draftScreenPx / PIN_HEIGHT
+  settledMarkers.push({
+    id: '__draft__',
+    position: draftPos,
+    scale: draftScale,
+    opacity: draftPos ? 1 : 0,
+    color: draftPosition.value.color,
+    title: '保存前のピン',
+    isDraft: true,
+  })
+
+  return settledMarkers
 })
 
 // ── 初期化 ──
@@ -229,6 +277,7 @@ onUnmounted(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
   threeGrid.disposeGrid()
+  handleDraftMouseUp()
   if (panoTransitionTimer) clearTimeout(panoTransitionTimer)
 })
 
@@ -239,6 +288,7 @@ function handleResize() {
 }
 
 function handleSelectPin(id: string) {
+  if (id === '__draft__') return
   emit('selectPin', id)
 }
 
@@ -315,6 +365,49 @@ function handlePanoramaClick(e: MouseEvent) {
     currentZoom.value,
   )
   emit('repositionPin', { id: props.repositioningPinId, pov })
+}
+
+function handleMarkerDragStart(marker: MarkerDatum, e: MouseEvent) {
+  if (!marker.isDraft || !draftPosition.value) return
+  if (!svRef.value || !panorama.value) return
+  e.preventDefault()
+  draggingDraft = true
+  handleShowGrid()
+  document.addEventListener('mousemove', handleDraftMouseMove)
+  document.addEventListener('mouseup', handleDraftMouseUp)
+}
+
+function handleDraftMouseMove(e: MouseEvent) {
+  if (!draggingDraft) return
+  if (!svRef.value) return
+  const rect = svRef.value.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+  if (x < 0 || x > rect.width || y < 0 || y > rect.height) return
+  const pov = pixelToPov(
+    x,
+    y,
+    currentPov.value,
+    Math.max(rect.width, 1),
+    Math.max(rect.height, 1),
+    currentZoom.value,
+  )
+  const snappedPov: Pov = {
+    heading: pov.heading,
+    pitch: Math.min(pov.pitch, -1),
+  }
+  emit('updateDraftPosition', {
+    pov: snappedPov,
+    color: draftPosition.value?.color || '#ef4444',
+  })
+}
+
+function handleDraftMouseUp() {
+  if (!draggingDraft) return
+  draggingDraft = false
+  handleHideGrid()
+  document.removeEventListener('mousemove', handleDraftMouseMove)
+  document.removeEventListener('mouseup', handleDraftMouseUp)
 }
 </script>
 
