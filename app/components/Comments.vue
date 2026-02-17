@@ -1,6 +1,6 @@
 <template>
-  <div class="comments">
-    <div class="scroll-container">
+  <div class="wrap">
+    <div class="scrollContainer">
       <Comment
         v-for="p in pins"
         :key="p.id"
@@ -13,6 +13,7 @@
         @reposition="$emit('repositionPin', $event)"
         @delete="$emit('deletePin', $event)"
       />
+      <p v-if="pins.length === 0" class="empty">ピンはありません</p>
     </div>
     <Composer
       :open="Boolean(draftPosition || edittingPinId)"
@@ -47,7 +48,7 @@ defineEmits<{
 </script>
 
 <style scoped>
-.comments {
+.wrap {
   width: 100%;
   height: 100%;
   display: flex;
@@ -57,19 +58,35 @@ defineEmits<{
   border-left: 1px solid var(--border);
 }
 
-.scroll-container {
+.scrollContainer {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  height: 100%;
+  padding: 6px 0;
   min-height: 0;
 }
 
-.scroll-container::-webkit-scrollbar {
+.scrollContainer:has(.comment.editting) .comment:not(.editting) {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.scrollContainer::-webkit-scrollbar {
   width: 4px;
 }
 
-.scroll-container::-webkit-scrollbar-thumb {
+.scrollContainer::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 2px;
+}
+
+.empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #ccc;
+  font-size: 15px;
 }
 </style>

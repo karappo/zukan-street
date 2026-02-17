@@ -5,19 +5,30 @@
 }
 
 :root {
-  --bg: #0f1117;
-  --surface: #1a1d27;
-  --surface-hover: #242836;
-  --border: #2a2e3a;
-  --text: #e8e9ed;
-  --text-muted: #8b8fa3;
-  --accent: #5b8af5;
-  --accent-glow: rgba(91, 138, 245, 0.25);
-  --pin-red: #ef4444;
-  --pin-blue: #3b82f6;
-  --pin-green: #22c55e;
-  --pin-yellow: #eab308;
-  --pin-purple: #a855f7;
+  --bg: #f2f2f2;
+  --surface: #fafafa;
+  --surface-hover: #ffffff;
+  --border: #cccccc;
+  --text: #333333;
+  --text-muted: #848484;
+  --accent: #007aff;
+  --accent-glow: rgba(0, 122, 255, 0.2);
+  --pin-color-red: #ff033e;
+  --pin-color-orange: #ffb05b;
+  --pin-color-yellow: #ffff01;
+  --pin-color-green: #14ae00;
+  --pin-color-blue: #00c8ff;
+  --pin-color-indigo: #0000ff;
+  --pin-color-violet: #f433fb;
+  --pin-color-gray: #848484;
+  --pin-red: var(--pin-color-red);
+  --pin-orange: var(--pin-color-orange);
+  --pin-yellow: var(--pin-color-yellow);
+  --pin-green: var(--pin-color-green);
+  --pin-blue: var(--pin-color-blue);
+  --pin-indigo: var(--pin-color-indigo);
+  --pin-violet: var(--pin-color-violet);
+  --pin-gray: var(--pin-color-gray);
   --radius: 10px;
   --font-ja: 'Noto Sans JP', sans-serif;
   --font-en: 'DM Sans', sans-serif;
@@ -25,7 +36,7 @@
 
 body {
   font-family: var(--font-ja);
-  background: var(--bg);
+  background: #fff;
   color: var(--text);
   height: 100vh;
   overflow: hidden;

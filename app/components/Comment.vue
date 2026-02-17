@@ -5,7 +5,7 @@
     @click="$emit('select', data.id)"
   >
     <header>
-      <div class="pin" :style="{ '--color': data.color }" />
+      <div class="pin" :style="{ '--color': pinCssColor }" />
       <h5 class="title">{{ data.title }}</h5>
       <div ref="menuRef" class="menu">
         <div class="menu-button" @click.stop="isMenuOpen = !isMenuOpen">⋮</div>
@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import type { Pin } from '~/composables/usePins'
+import { resolvePinColor } from '~/utils/pinColor'
 
 const props = defineProps<{
   data: Pin
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 
 const isMenuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
+const pinCssColor = computed(() => resolvePinColor(props.data.color))
 
 function clickOption(slug: 'edit' | 'reposition' | 'delete') {
   isMenuOpen.value = false
@@ -77,6 +79,7 @@ onUnmounted(() => {
   border: 2px solid transparent;
   overflow: visible;
   position: relative;
+  z-index: 1;
 }
 
 .comment.selected,
@@ -84,6 +87,16 @@ onUnmounted(() => {
 .comment.repositioning {
   border-color: #ccc;
   background: #fff;
+}
+
+.comment:hover,
+.comment.selected {
+  z-index: 2;
+}
+
+.comment:hover:has(.menu-options),
+.comment.selected:has(.menu-options) {
+  z-index: 10;
 }
 
 header {
@@ -124,6 +137,7 @@ header {
 .menu {
   margin-left: auto;
   position: relative;
+  visibility: hidden;
 }
 
 .menu-button {
@@ -134,6 +148,11 @@ header {
   justify-content: center;
   align-items: center;
   color: #666;
+}
+
+.comment:hover .menu,
+.comment.selected .menu {
+  visibility: visible;
 }
 
 .menu-options {
@@ -166,11 +185,11 @@ header {
 
 .body {
   font-size: 13px;
-  line-height: 1.7em;
+  line-height: 1.8em;
   color: #3c3c3c;
   margin: 0 0 10px;
   white-space: pre-wrap;
-  word-break: break-word;
+  word-break: break-all;
 }
 
 .meta {

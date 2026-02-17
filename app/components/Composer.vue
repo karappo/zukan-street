@@ -2,7 +2,8 @@
   <div v-if="open" class="composer">
     <div class="title-row">
       <div class="pin-wrap">
-        <div class="pin" :style="{ '--color': selectedColor }" />
+        <div class="pin" :style="{ '--color': `var(--pin-color-${selectedColor})` }" />
+        <PinColorPicker v-model="selectedColor" class="pinColorPicker" />
       </div>
       <input
         ref="titleInput"
@@ -18,20 +19,6 @@
       placeholder="こめんと"
     />
     <hr>
-    <div class="color-row">
-      <span class="label">いろ</span>
-      <div class="color-picker">
-        <button
-          v-for="c in colors"
-          :key="c"
-          class="color-opt"
-          :class="{ selected: selectedColor === c }"
-          :style="{ background: c }"
-          @click="selectedColor = c"
-        />
-      </div>
-    </div>
-    <hr>
     <div class="bottom">
       <button class="btn cancel" @click="$emit('cancel')">やめる</button>
       <button class="btn save" @click="handleSave">保存</button>
@@ -40,6 +27,8 @@
 </template>
 
 <script setup lang="ts">
+import type { PinColorName } from '~/utils/pinColor'
+
 const props = defineProps<{
   open: boolean
   mode: 'create' | 'edit' | null
@@ -53,9 +42,8 @@ const emit = defineEmits<{
 
 const title = ref('')
 const desc = ref('')
-const selectedColor = ref('#ef4444')
+const selectedColor = ref<PinColorName>('red')
 const titleInput = ref<HTMLInputElement | null>(null)
-const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7']
 
 watch(
   () => props.open,
@@ -64,7 +52,7 @@ watch(
     if (props.initial) {
       title.value = props.initial.title || ''
       desc.value = props.initial.desc || ''
-      selectedColor.value = props.initial.color || '#ef4444'
+      selectedColor.value = (props.initial.color || 'red') as PinColorName
     }
     nextTick(() => titleInput.value?.focus())
   },
@@ -76,7 +64,7 @@ watch(
     if (!props.open || !v) return
     title.value = v.title || ''
     desc.value = v.desc || ''
-    selectedColor.value = v.color || '#ef4444'
+    selectedColor.value = (v.color || 'red') as PinColorName
   },
 )
 
@@ -123,14 +111,30 @@ function handleSave() {
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative;
+}
+
+.pin-wrap:hover .pinColorPicker {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .pin {
-  --color: #ef4444;
+  --color: var(--pin-color-red);
   width: 4px;
   height: 4px;
   border-radius: 50%;
   border: 3px solid var(--color);
+}
+
+.pinColorPicker {
+  position: absolute;
+  top: 34px;
+  left: -8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 20;
 }
 
 .comment {
@@ -143,36 +147,6 @@ function handleSave() {
   line-height: 1.7;
   padding: 10px 0;
   outline: none;
-}
-
-.color-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-
-  .label {
-    font-size: 12px;
-    color: #848484;
-  }
-}
-
-.color-picker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.color-opt {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-}
-
-.color-opt.selected {
-  border-color: #333;
 }
 
 .bottom {

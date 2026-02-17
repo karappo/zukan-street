@@ -30,7 +30,7 @@ export function useDragPin() {
     dragPinStyle.value = {
       left: `${e.clientX}px`,
       top: `${e.clientY}px`,
-      transform: 'translate(-50%, -100%)',
+      transform: 'translate(-50%, -50%)',
     }
     dragPinScale.value = 1
 
@@ -50,7 +50,7 @@ export function useDragPin() {
         dragPinStyle.value = {
           left: `${ev.clientX}px`,
           top: `${ev.clientY}px`,
-          transform: 'translate(-50%, -100%)',
+          transform: 'translate(-50%, -50%)',
         }
         dragPinScale.value = 1
         snappedPov.value = null
@@ -79,7 +79,7 @@ export function useDragPin() {
           // 物理スケール計算
           const CAM_H = 2.5
           const REAL_HEIGHT = 1
-          const PIN_H = 40
+          const PIN_H = 14
           const dist = CAM_H / Math.tan(Math.abs(snapped.pitch) * DEG2RAD)
           const dV = computeDV(svRect.width, svRect.height, zoom)
           const scale = (REAL_HEIGHT / Math.max(dist, 0.5) * dV) / PIN_H
@@ -87,14 +87,14 @@ export function useDragPin() {
           dragPinStyle.value = {
             left: `${svRect.left + screenPos.x}px`,
             top: `${svRect.top + screenPos.y}px`,
-            transform: 'translate(-50%, -100%)',
+            transform: 'translate(-50%, -50%)',
           }
           dragPinScale.value = scale
         } else {
           dragPinStyle.value = {
             left: `${ev.clientX}px`,
             top: `${ev.clientY}px`,
-            transform: 'translate(-50%, -100%)',
+            transform: 'translate(-50%, -50%)',
           }
           dragPinScale.value = 1
           snappedPov.value = null
@@ -103,7 +103,7 @@ export function useDragPin() {
         dragPinStyle.value = {
           left: `${ev.clientX}px`,
           top: `${ev.clientY}px`,
-          transform: 'translate(-50%, -100%)',
+          transform: 'translate(-50%, -50%)',
         }
         dragPinScale.value = 1
         snappedPov.value = null

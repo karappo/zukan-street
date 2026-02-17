@@ -15,7 +15,7 @@
       class="marker-pin"
       :style="{
         transform: `scale(${scale})`,
-        transformOrigin: 'bottom center',
+        transformOrigin: 'center center',
       }"
       v-html="markerSVG(color)"
     />
@@ -47,7 +47,7 @@ defineEmits<{
   position: absolute;
   cursor: pointer;
   pointer-events: auto;
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, -50%);
   transition: transform 0.15s ease;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
   z-index: 10;
@@ -67,8 +67,8 @@ defineEmits<{
   }
 
   .marker-pin {
-    width: 32px;
-    height: 40px;
+    width: 14px;
+    height: 14px;
     position: relative;
 
     :deep(svg) {
@@ -79,16 +79,17 @@ defineEmits<{
 
   .marker-label {
     position: absolute;
-    bottom: -4px;
+    bottom: -18px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(26, 29, 39, 0.92);
+    background: #fff;
     backdrop-filter: blur(8px);
-    border: 1px solid var(--border);
+    border: 1px solid #d9d9d9;
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 500;
+    color: #333;
     white-space: nowrap;
     opacity: 0;
     pointer-events: none;
@@ -97,7 +98,7 @@ defineEmits<{
 
   &:hover .marker-label {
     opacity: 1;
-    bottom: -30px;
+    bottom: -34px;
   }
 }
 </style>

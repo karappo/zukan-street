@@ -25,7 +25,7 @@
         class="marker-pin"
         :style="{
           transform: `scale(${dragPinScale})`,
-          transformOrigin: 'bottom center',
+          transformOrigin: 'center center',
         }"
         v-html="markerSVG(currentColor)"
       />
@@ -54,7 +54,7 @@ const emit = defineEmits<{
 const toolbarRef = ref<HTMLElement | null>(null)
 const { isDragging, dragPinStyle, dragPinScale, startDrag } = useDragPin()
 
-const currentColor = computed(() => props.selectedColor || '#ef4444')
+const currentColor = computed(() => props.selectedColor || 'red')
 
 function handleMouseDown(e: MouseEvent) {
   if (!props.panorama || !props.svEl) return
@@ -80,12 +80,12 @@ function handleMouseDown(e: MouseEvent) {
   align-items: center;
   gap: 4px;
   padding: 6px;
-  background: rgba(26, 29, 39, 0.92);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 14px;
   z-index: 50;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
 
   .tool-btn {
     display: flex;
@@ -95,7 +95,7 @@ function handleMouseDown(e: MouseEvent) {
     border: none;
     border-radius: var(--radius);
     background: transparent;
-    color: var(--text-muted);
+    color: #666;
     font-family: var(--font-ja);
     font-size: 13px;
     cursor: pointer;
@@ -103,8 +103,8 @@ function handleMouseDown(e: MouseEvent) {
     white-space: nowrap;
 
     &:hover {
-      background: var(--surface-hover);
-      color: var(--text);
+      background: #f4f4f4;
+      color: #333;
     }
 
     svg {
@@ -125,8 +125,10 @@ function handleMouseDown(e: MouseEvent) {
 .drag-pin-area {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 4px 10px 4px 6px;
+  min-height: 32px;
   border-radius: var(--radius);
   cursor: grab;
   user-select: none;
@@ -146,11 +148,14 @@ function handleMouseDown(e: MouseEvent) {
   }
 
   .marker-pin {
-    width: 20px;
-    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
 
     :deep(svg) {
-      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+      display: block;
       width: 100%;
       height: 100%;
     }
@@ -159,7 +164,8 @@ function handleMouseDown(e: MouseEvent) {
 
 .drag-pin-hint {
   font-size: 13px;
-  color: var(--text-muted);
+  line-height: 1;
+  color: #666;
   pointer-events: none;
   white-space: nowrap;
   transition: color 0.15s;
@@ -173,10 +179,11 @@ function handleMouseDown(e: MouseEvent) {
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
 
   .marker-pin {
-    width: 32px;
-    height: 40px;
+    width: 15px;
+    height: 15px;
 
     :deep(svg) {
+      display: block;
       width: 100%;
       height: 100%;
     }
