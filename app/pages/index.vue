@@ -50,16 +50,12 @@ const {
   addPin,
   updatePin,
   deletePin,
-  loadDemoData,
 } = usePins()
 const { showToast } = useToast()
 
 const svContainer = ref<InstanceType<typeof import('~/components/StreetViewContainer.vue').default> | null>(null)
 const repositioningPinId = ref<string | null>(null)
 const composerInitial = ref<{ title: string; desc: string; color: string } | null>(null)
-
-// デモデータロード
-loadDemoData()
 
 function handleSelectPin(id: string) {
   setSelectedPinId(id)
