@@ -19,6 +19,12 @@ export default defineNuxtConfig({
     },
   },
   css: ['~/assets/css/variables.css'],
+  modules: [
+    '@element-plus/nuxt',
+  ],
+  build: {
+    transpile: ['element-plus'],
+  },
   runtimeConfig: {
     public: {
       googleMapsApiKey: '',

@@ -112,29 +112,32 @@ function handleSave() {
   justify-content: center;
   align-items: center;
   position: relative;
-}
+  overflow: visible;
 
-.pin-wrap:hover .pinColorPicker {
-  opacity: 1;
-  pointer-events: auto;
-}
+  &:hover {
+    .pinColorPicker {
+      opacity: 1;
+      pointer-events: all;
+    }
+  }
 
-.pin {
-  --color: var(--pin-color-red);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  border: 3px solid var(--color);
-}
+  .pin {
+    --color: var(--pin-color-red);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    border: 3px solid var(--color);
+  }
 
-.pinColorPicker {
-  position: absolute;
-  top: 34px;
-  left: -8px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
-  z-index: 20;
+  .pinColorPicker {
+    position: absolute;
+    top: 23px;
+    left: -3px;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
 }
 
 .comment {

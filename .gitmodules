@@ -1,0 +1,4 @@
+[submodule "app/assets/css/general"]
+	path = app/assets/css/general
+	url = https://github.com/naokazuterada/general.git
+	branch = css

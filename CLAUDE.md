@@ -66,6 +66,18 @@ Comments / MarkerOverlay (リアクティブに反映)
 色は CSS 変数（`--pin-color-*`、`app/assets/css/variables.css` で定義）を通じて解決される。
 `markerSvg.ts` が SVG 円マーカーを生成する。
 
+## 姉妹プロジェクト
+
+`/Users/terada/Sites/zukan360.yamaguchi-ygc.ed.jp` — 360°図鑑（本番: zukan360.yamaguchi-ygc.ed.jp）。
+Firebase + Nuxt 4 で構築された学校向けの 360°パノラマ図鑑アプリ。
+UI やスタイルの方針はこちらに合わせる。共通点:
+
+- Element Plus（UIコンポーネントライブラリ）
+- Splitpanes による左右分割レイアウト
+- ピンカラーシステム（8色、同じ CSS 変数名）
+- general CSS（reset, fixes, kerning）
+- Pinia（状態管理、姉妹側で使用）
+
 ## コーディング規約
 
 - TypeScript + Vue SFC（`<script setup lang="ts">`）、2 スペースインデント
