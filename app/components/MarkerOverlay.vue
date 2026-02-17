@@ -2,7 +2,7 @@
   <div
     v-if="position"
     class="sv-marker"
-    :class="{ selected: isSelected, draft: isDraft }"
+    :class="{ selected: isSelected, draft: isDraft, repositioning, dragging }"
     :style="{
       left: `${position.x}px`,
       top: `${position.y}px`,
@@ -17,14 +17,14 @@
         transform: `scale(${scale})`,
         transformOrigin: 'center center',
       }"
-      v-html="markerSVG(color)"
+      v-html="isDraft ? crossMarkerSVG(color) : markerSVG(color)"
     />
     <div class="marker-label">{{ title }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { markerSVG } from '~/utils/markerSvg'
+import { markerSVG, crossMarkerSVG } from '~/utils/markerSvg'
 
 defineProps<{
   position: { x: number; y: number } | null
@@ -34,6 +34,8 @@ defineProps<{
   title: string
   isSelected: boolean
   isDraft?: boolean
+  repositioning?: boolean
+  dragging?: boolean
 }>()
 
 defineEmits<{
@@ -100,5 +102,23 @@ defineEmits<{
     opacity: 1;
     bottom: -34px;
   }
+
+  &.repositioning {
+    cursor: move;
+    z-index: 25;
+
+    .marker-pin {
+      animation: dokkindokkin 0.4s infinite;
+    }
+
+    &.dragging .marker-label {
+      display: none;
+    }
+  }
+}
+
+@keyframes dokkindokkin {
+  0% { scale: 1.3; }
+  100% { scale: 1.0; }
 }
 </style>

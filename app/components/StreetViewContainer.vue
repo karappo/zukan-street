@@ -1,5 +1,5 @@
 <template>
-  <div class="streetview-wrap" :class="{ repositioning: Boolean(repositioningPinId) }">
+  <div class="streetview-wrap">
     <div ref="svRef" class="streetview-pano" />
     <div class="marker-overlay">
       <MarkerOverlay
@@ -12,6 +12,8 @@
         :title="marker.title"
         :is-selected="marker.id === selectedPinId || marker.isDraft"
         :is-draft="marker.isDraft"
+        :repositioning="marker.isRepositioning"
+        :dragging="rpDragging && marker.isRepositioning"
         @select="handleSelectPin(marker.id)"
         @drag-start="handleMarkerDragStart(marker, $event)"
       />
@@ -51,6 +53,8 @@ const emit = defineEmits<{
   openComposer: [data: { pov: Pov; color: string }]
   repositionPin: [data: { id: string; pov: Pov }]
   updateDraftPosition: [data: { pov: Pov; color: string }]
+  cancelRepositioning: []
+  confirmRepositioning: []
 }>()
 
 const config = useRuntimeConfig()
@@ -76,6 +80,9 @@ let draggingDraft = false
 let panoramaMouseDownPos: { x: number; y: number } | null = null
 const PANORAMA_DRAG_THRESHOLD_PX = 6
 
+// Reposition drag state
+const rpDragging = ref(false)
+
 // Drag color
 const currentDragColor = ref('red')
 
@@ -83,6 +90,10 @@ const currentDragColor = ref('red')
 const PIN_HEIGHT = 14
 const REAL_HEIGHT = 1
 const MIN_PX = 2
+
+function distanceToScale(distance: number, dV: number): number {
+  return REAL_HEIGHT / Math.max(distance, 0.5) * dV / PIN_HEIGHT
+}
 
 interface MarkerDatum {
   id: string
@@ -92,6 +103,7 @@ interface MarkerDatum {
   color: string
   title: string
   isDraft?: boolean
+  isRepositioning?: boolean
 }
 
 const markerData = computed<MarkerDatum[]>(() => {
@@ -122,6 +134,7 @@ const markerData = computed<MarkerDatum[]>(() => {
         opacity: pos ? 1 : 0,
         color: pin.color,
         title: pin.title,
+        isRepositioning: pin.id === props.repositioningPinId,
       }
     })
     if (draftPosition.value) {
@@ -154,25 +167,25 @@ const markerData = computed<MarkerDatum[]>(() => {
 
   const settledMarkers = pins.value.map((pin) => {
     const distance = computeDistance(panoLat, panoLng, pin.lat, pin.lng)
+    const isRepositioning = pin.id === props.repositioningPinId
 
     if (distance > MAX_DISTANCE) {
-      return { id: pin.id, position: null, scale: 1, opacity: 0, color: pin.color, title: pin.title }
+      return { id: pin.id, position: null, scale: 1, opacity: 0, color: pin.color, title: pin.title, isRepositioning }
     }
 
     const pinPov = getPinPov(pin, panoLat, panoLng)
     const pos = povToPixel(pinPov, pov, w, h, zoom)
 
     if (!pos) {
-      return { id: pin.id, position: null, scale: 1, opacity: 0, color: pin.color, title: pin.title }
+      return { id: pin.id, position: null, scale: 1, opacity: 0, color: pin.color, title: pin.title, isRepositioning }
     }
 
-    const screenPx = REAL_HEIGHT / Math.max(distance, 0.5) * dV
-    const scale = screenPx / PIN_HEIGHT
+    const scale = distanceToScale(distance, dV)
     const opacity = distance > FADE_START
       ? 1 - (distance - FADE_START) / (MAX_DISTANCE - FADE_START)
       : 1
 
-    return { id: pin.id, position: pos, scale, opacity, color: pin.color, title: pin.title }
+    return { id: pin.id, position: pos, scale, opacity, color: pin.color, title: pin.title, isRepositioning }
   })
 
   if (!draftPosition.value) return settledMarkers
@@ -185,8 +198,7 @@ const markerData = computed<MarkerDatum[]>(() => {
     zoom,
   )
   const draftDistance = estimateDistance(draftPosition.value.pov.pitch)
-  const draftScreenPx = REAL_HEIGHT / Math.max(draftDistance, 0.5) * dV
-  const draftScale = draftScreenPx / PIN_HEIGHT
+  const draftScale = distanceToScale(draftDistance, dV)
   settledMarkers.push({
     id: '__draft__',
     position: draftPos,
@@ -275,6 +287,7 @@ onUnmounted(() => {
   resizeObserver = null
   threeGrid.disposeGrid()
   handleDraftMouseUp()
+  handleRepositionDragUp()
   if (panoTransitionTimer) clearTimeout(panoTransitionTimer)
 })
 
@@ -341,11 +354,13 @@ onMounted(() => {
   if (!svRef.value) return
   svRef.value.addEventListener('mousedown', handlePanoramaMouseDown, true)
   svRef.value.addEventListener('click', handlePanoramaClick, true)
+  document.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
   svRef.value?.removeEventListener('mousedown', handlePanoramaMouseDown, true)
   svRef.value?.removeEventListener('click', handlePanoramaClick, true)
+  document.removeEventListener('keydown', handleKeyDown)
 })
 
 function handlePanoramaMouseDown(e: MouseEvent) {
@@ -354,24 +369,17 @@ function handlePanoramaMouseDown(e: MouseEvent) {
 
 function handlePanoramaClick(e: MouseEvent) {
   if (isPanoramaDragClick(e)) return
-  if (!props.repositioningPinId) {
-    hideOverlaysTemporarily()
+  if (props.repositioningPinId) {
+    emit('confirmRepositioning')
     return
   }
-  if (!svRef.value || !panorama.value) return
-  const rect = svRef.value.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const y = e.clientY - rect.top
-  if (x < 0 || x > rect.width || y < 0 || y > rect.height) return
-  const pov = pixelToPov(
-    x,
-    y,
-    currentPov.value,
-    Math.max(rect.width, 1),
-    Math.max(rect.height, 1),
-    currentZoom.value,
-  )
-  emit('repositionPin', { id: props.repositioningPinId, pov })
+  hideOverlaysTemporarily()
+}
+
+function handleKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && props.repositioningPinId) {
+    emit('cancelRepositioning')
+  }
 }
 
 function isPanoramaDragClick(e: MouseEvent) {
@@ -392,6 +400,18 @@ function hideOverlaysTemporarily() {
 }
 
 function handleMarkerDragStart(marker: MarkerDatum, e: MouseEvent) {
+  // 再配置モードのピンをドラッグ（ドラフトドラッグと同じ方式）
+  if (marker.isRepositioning && props.repositioningPinId) {
+    if (!svRef.value || !panorama.value) return
+    e.preventDefault()
+    rpDragging.value = true
+    handleShowGrid()
+    document.addEventListener('mousemove', handleRepositionDragMove)
+    document.addEventListener('mouseup', handleRepositionDragUp)
+    return
+  }
+
+  // 下書きピンのドラッグ
   if (!marker.isDraft || !draftPosition.value) return
   if (!svRef.value || !panorama.value) return
   e.preventDefault()
@@ -433,6 +453,35 @@ function handleDraftMouseUp() {
   document.removeEventListener('mousemove', handleDraftMouseMove)
   document.removeEventListener('mouseup', handleDraftMouseUp)
 }
+
+function handleRepositionDragMove(e: MouseEvent) {
+  if (!rpDragging.value || !svRef.value || !props.repositioningPinId) return
+  const rect = svRef.value.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+  if (x < 0 || x > rect.width || y < 0 || y > rect.height) return
+  const pov = pixelToPov(
+    x,
+    y,
+    currentPov.value,
+    Math.max(rect.width, 1),
+    Math.max(rect.height, 1),
+    currentZoom.value,
+  )
+  const snappedPov: Pov = {
+    heading: pov.heading,
+    pitch: Math.min(pov.pitch, -1),
+  }
+  emit('repositionPin', { id: props.repositioningPinId, pov: snappedPov })
+}
+
+function handleRepositionDragUp() {
+  if (!rpDragging.value) return
+  rpDragging.value = false
+  handleHideGrid()
+  document.removeEventListener('mousemove', handleRepositionDragMove)
+  document.removeEventListener('mouseup', handleRepositionDragUp)
+}
 </script>
 
 <style scoped>
@@ -463,10 +512,6 @@ function handleDraftMouseUp() {
     pointer-events: none;
     z-index: 5;
     visibility: hidden;
-  }
-
-  &.repositioning {
-    cursor: crosshair;
   }
 }
 </style>

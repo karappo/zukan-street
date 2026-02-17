@@ -10,6 +10,8 @@
             @open-composer="handleOpenComposer"
             @reposition-pin="handleRepositionPinCommit"
             @update-draft-position="handleUpdateDraftPosition"
+            @cancel-repositioning="handleCancelRepositioning"
+            @confirm-repositioning="handleConfirmRepositioning"
           />
         </ClientOnly>
       </Pane>
@@ -55,6 +57,7 @@ const { showToast } = useToast()
 
 const svContainer = ref<InstanceType<typeof import('~/components/StreetViewContainer.vue').default> | null>(null)
 const repositioningPinId = ref<string | null>(null)
+const repositioningOriginal = ref<Pick<Pin, 'lat' | 'lng' | 'originLat' | 'originLng' | 'heading' | 'pitch'> | null>(null)
 const composerInitial = ref<{ title: string; desc: string; color: string } | null>(null)
 
 function handleSelectPin(id: string) {
@@ -164,10 +167,20 @@ function handleRepositionPinStart(id: string) {
   repositioningPinId.value = id
   setSelectedPinId(id)
   const pin = pins.value.find(p => p.id === id)
-  if (pin && svContainer.value) {
-    svContainer.value.lookAtPin(pin)
+  if (pin) {
+    repositioningOriginal.value = {
+      lat: pin.lat,
+      lng: pin.lng,
+      originLat: pin.originLat,
+      originLng: pin.originLng,
+      heading: pin.heading,
+      pitch: pin.pitch,
+    }
+    if (svContainer.value) {
+      svContainer.value.lookAtPin(pin)
+    }
   }
-  showToast('パノラマ上をクリックして新しい位置に再配置します')
+  showToast('ピンをドラッグして移動（Escでキャンセル）')
 }
 
 function handleRepositionPinCommit(data: { id: string; pov: Pov }) {
@@ -189,8 +202,20 @@ function handleRepositionPinCommit(data: { id: string; pov: Pov }) {
     pitch: data.pov.pitch,
     time: 'たった今',
   })
+}
+
+function handleCancelRepositioning() {
+  if (repositioningPinId.value && repositioningOriginal.value) {
+    updatePin(repositioningPinId.value, repositioningOriginal.value)
+  }
   repositioningPinId.value = null
-  showToast('ピンを再配置しました')
+  repositioningOriginal.value = null
+  showToast('再配置をキャンセルしました')
+}
+
+function handleConfirmRepositioning() {
+  repositioningPinId.value = null
+  repositioningOriginal.value = null
 }
 
 function handleSplitResize() {
