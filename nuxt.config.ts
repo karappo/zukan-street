@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   app: {
     head: {
-      title: 'Street View アノテーション デモ — YCAM',
+      title: 'ストリートビュー図鑑',
       htmlAttrs: { lang: 'ja' },
       meta: [
         { charset: 'utf-8' },

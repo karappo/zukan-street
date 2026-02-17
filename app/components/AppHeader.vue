@@ -2,7 +2,7 @@
   <div class="header">
     <div class="header-left">
       <div class="logo">SV</div>
-      <h1>Street View アノテーション<span>YCAM周辺</span></h1>
+      <h1>ストリートビュー図鑑<span>YCAM周辺</span></h1>
     </div>
     <div class="header-right">
       <div class="badge">DEMO</div>
