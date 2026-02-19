@@ -18,6 +18,7 @@
         @drag-start="handleMarkerDragStart(marker, $event)"
       />
     </div>
+    <TimeMachineDropdown />
     <DragPinToolbar
       :panorama="panorama"
       :sv-el="svRef"
