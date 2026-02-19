@@ -48,6 +48,8 @@ export function useGoogleMaps() {
       motionTracking: false,
       motionTrackingControl: false,
       imageDateControl: true,
+      panControl: false,
+      zoomControl: false,
     })
 
     panorama.value = pano
