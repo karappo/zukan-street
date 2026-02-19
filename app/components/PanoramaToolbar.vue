@@ -12,6 +12,25 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       初期位置に戻る
     </button>
+    <template v-if="availableTimeline.length > 1">
+      <div class="divider" />
+      <div ref="tmRef" class="time-machine-wrap">
+        <button class="tool-btn" @click.stop="isTmOpen = !isTmOpen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {{ currentDateLabel }}
+        </button>
+        <ul v-if="isTmOpen" class="time-machine-menu">
+          <li
+            v-for="entry in availableTimeline"
+            :key="entry.pano"
+            :class="{ active: isActiveDate(entry) }"
+            @click="handleSelectDate(entry.pano)"
+          >
+            {{ formatDate(entry.date) }}
+          </li>
+        </ul>
+      </div>
+    </template>
   </div>
 
   <!-- ドラッグ中のフローティングピン -->
@@ -36,6 +55,7 @@
 <script setup lang="ts">
 import { markerSVG } from '~/utils/markerSvg'
 import type { Pov } from '~/utils/geometry'
+import type { TimelineEntry } from '~/composables/useGoogleMaps'
 
 const props = defineProps<{
   panorama: google.maps.StreetViewPanorama | null
@@ -68,6 +88,47 @@ function handleMouseDown(e: MouseEvent) {
     getToolbarRect: () => toolbarRef.value!.getBoundingClientRect(),
   })
 }
+
+// タイムマシン
+const { availableTimeline, currentImageDate, switchTimeline } = useGoogleMaps()
+const isTmOpen = ref(false)
+const tmRef = ref<HTMLElement | null>(null)
+
+const currentDateLabel = computed(() => {
+  if (!currentImageDate.value) return ''
+  const [y, m] = currentImageDate.value.split('-')
+  return `${y}年${parseInt(m)}月`
+})
+
+function formatDate(date: Date) {
+  return `${date.getFullYear()}年${date.getMonth() + 1}月`
+}
+
+function isActiveDate(entry: TimelineEntry) {
+  if (!currentImageDate.value) return false
+  const [y, m] = currentImageDate.value.split('-')
+  return entry.date.getFullYear() === parseInt(y) && entry.date.getMonth() + 1 === parseInt(m)
+}
+
+function handleSelectDate(panoId: string) {
+  switchTimeline(panoId)
+  isTmOpen.value = false
+}
+
+function onWindowClick(e: MouseEvent) {
+  if (!isTmOpen.value) return
+  const target = e.target as Node | null
+  if (target && tmRef.value?.contains(target)) return
+  isTmOpen.value = false
+}
+
+onMounted(() => {
+  window.addEventListener('click', onWindowClick)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', onWindowClick)
+})
 </script>
 
 <style scoped>
@@ -119,6 +180,48 @@ function handleMouseDown(e: MouseEvent) {
     height: 24px;
     background: var(--border);
     margin: 0 4px;
+  }
+
+  .time-machine-wrap {
+    position: relative;
+  }
+
+  .time-machine-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    padding: 5px 0;
+    min-width: 120px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+    list-style: none;
+    max-height: 240px;
+    overflow-y: auto;
+
+    li {
+      color: #666;
+      cursor: pointer;
+      padding: 6px 14px;
+      font-size: 13px;
+      white-space: nowrap;
+
+      &:hover {
+        background: #f4f4f4;
+        color: #333;
+      }
+
+      &.active {
+        color: #333;
+        font-weight: 500;
+
+        &::before {
+          content: '\2713  ';
+        }
+      }
+    }
   }
 }
 
