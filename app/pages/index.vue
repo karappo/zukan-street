@@ -23,14 +23,12 @@
           :repositioning-pin-id="repositioningPinId"
           :draft-position="draftPosition"
           :composer-initial="composerInitial"
-          :show-all-dates="showAllDates"
           @select-pin="handleSelectPin"
           @edit-pin="handleEditPin"
           @reposition-pin="handleRepositionPinStart"
           @delete-pin="handleDeletePin"
           @save-pin="handleSavePin"
           @cancel-composer="handleCancelComposer"
-          @toggle-show-all-dates="toggleShowAllDates"
         />
       </Pane>
     </Splitpanes>
@@ -49,14 +47,12 @@ const {
   selectedPinId,
   edittingPinId,
   draftPosition,
-  showAllDates,
   setSelectedPinId,
   setEdittingPinId,
   setDraftPosition,
   addPin,
   updatePin,
   deletePin,
-  toggleShowAllDates,
 } = usePins()
 const { showToast } = useToast()
 

@@ -27,10 +27,7 @@ const overlaysHidden = ref(false)
 const selectedPinId = ref<string | null>(null)
 const edittingPinId = ref<string | null>(null)
 const draftPosition = ref<DraftPosition | null>(null)
-const showAllDates = ref(false)
-
 const filteredPins = computed(() => {
-  if (showAllDates.value) return pins.value
   const { currentImageDate } = useGoogleMaps()
   const date = currentImageDate.value
   if (!date) return pins.value
@@ -85,10 +82,6 @@ export function usePins() {
     })
   }
 
-  function toggleShowAllDates() {
-    showAllDates.value = !showAllDates.value
-  }
-
   return {
     pins: readonly(pins),
     filteredPins: readonly(filteredPins),
@@ -96,7 +89,6 @@ export function usePins() {
     selectedPinId,
     edittingPinId,
     draftPosition,
-    showAllDates: readonly(showAllDates),
     setSelectedPinId,
     setEdittingPinId,
     setDraftPosition,
@@ -104,6 +96,5 @@ export function usePins() {
     updatePin,
     deletePin,
     setOriginForAll,
-    toggleShowAllDates,
   }
 }
