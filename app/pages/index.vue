@@ -17,18 +17,20 @@
       </Pane>
       <Pane class="pane-sidebar" size="28" min-size="20">
         <Comments
-          :pins="pins"
+          :pins="filteredPins"
           :selected-pin-id="selectedPinId"
           :editting-pin-id="edittingPinId"
           :repositioning-pin-id="repositioningPinId"
           :draft-position="draftPosition"
           :composer-initial="composerInitial"
+          :show-all-dates="showAllDates"
           @select-pin="handleSelectPin"
           @edit-pin="handleEditPin"
           @reposition-pin="handleRepositionPinStart"
           @delete-pin="handleDeletePin"
           @save-pin="handleSavePin"
           @cancel-composer="handleCancelComposer"
+          @toggle-show-all-dates="toggleShowAllDates"
         />
       </Pane>
     </Splitpanes>
@@ -43,15 +45,18 @@ import type { Pin } from '~/composables/usePins'
 
 const {
   pins,
+  filteredPins,
   selectedPinId,
   edittingPinId,
   draftPosition,
+  showAllDates,
   setSelectedPinId,
   setEdittingPinId,
   setDraftPosition,
   addPin,
   updatePin,
   deletePin,
+  toggleShowAllDates,
 } = usePins()
 const { showToast } = useToast()
 
@@ -95,12 +100,15 @@ function handleSavePin(formData: { title: string; desc: string; color: string })
   const panoLat = panoPos.lat()
   const panoLng = panoPos.lng()
 
+  const { currentImageDate } = useGoogleMaps()
+
   if (edittingPinId.value) {
     updatePin(edittingPinId.value, {
       title: formData.title,
       desc: formData.desc,
       color: formData.color,
       time: 'たった今',
+      imageDate: currentImageDate.value,
     })
     showToast('ピンを更新しました')
     setEdittingPinId(null)
@@ -127,6 +135,7 @@ function handleSavePin(formData: { title: string; desc: string; color: string })
     color: formData.color,
     author: 'あなた',
     time: 'たった今',
+    imageDate: currentImageDate.value,
   }
 
   addPin(pin)

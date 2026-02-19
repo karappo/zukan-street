@@ -14,6 +14,7 @@ export interface Pin {
   color: string
   author: string
   time: string
+  imageDate: string | null
 }
 
 export interface DraftPosition {
@@ -26,6 +27,15 @@ const overlaysHidden = ref(false)
 const selectedPinId = ref<string | null>(null)
 const edittingPinId = ref<string | null>(null)
 const draftPosition = ref<DraftPosition | null>(null)
+const showAllDates = ref(false)
+
+const filteredPins = computed(() => {
+  if (showAllDates.value) return pins.value
+  const { currentImageDate } = useGoogleMaps()
+  const date = currentImageDate.value
+  if (!date) return pins.value
+  return pins.value.filter(p => p.imageDate == null || p.imageDate === date)
+})
 
 export function usePins() {
   function setSelectedPinId(id: string | null) {
@@ -75,12 +85,18 @@ export function usePins() {
     })
   }
 
+  function toggleShowAllDates() {
+    showAllDates.value = !showAllDates.value
+  }
+
   return {
     pins: readonly(pins),
+    filteredPins: readonly(filteredPins),
     overlaysHidden,
     selectedPinId,
     edittingPinId,
     draftPosition,
+    showAllDates: readonly(showAllDates),
     setSelectedPinId,
     setEdittingPinId,
     setDraftPosition,
@@ -88,5 +104,6 @@ export function usePins() {
     updatePin,
     deletePin,
     setOriginForAll,
+    toggleShowAllDates,
   }
 }

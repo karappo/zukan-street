@@ -65,7 +65,7 @@ const svRef = ref<HTMLElement | null>(null)
 const { panorama, currentPov, currentZoom, loadApi, initPanorama, resetView } = useGoogleMaps()
 
 // Pins
-const { pins, selectedPinId, draftPosition, overlaysHidden, setOriginForAll } = usePins()
+const { filteredPins, selectedPinId, draftPosition, overlaysHidden, setOriginForAll } = usePins()
 
 // Three.js Grid
 const threeGrid = useThreeGrid()
@@ -119,7 +119,7 @@ const markerData = computed<MarkerDatum[]>(() => {
 
   const panoPos = panorama.value.getPosition()
   if (!panoPos) {
-    const markers = pins.value.map((pin) => {
+    const markers = filteredPins.value.map((pin) => {
       const pos = povToPixel(
         { heading: pin.heading, pitch: pin.pitch },
         pov,
@@ -165,7 +165,7 @@ const markerData = computed<MarkerDatum[]>(() => {
   const MAX_DISTANCE = REAL_HEIGHT * dV / MIN_PX
   const FADE_START = MAX_DISTANCE * 0.6
 
-  const settledMarkers = pins.value.map((pin) => {
+  const settledMarkers = filteredPins.value.map((pin) => {
     const distance = computeDistance(panoLat, panoLng, pin.lat, pin.lng)
     const isRepositioning = pin.id === props.repositioningPinId
 

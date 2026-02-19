@@ -6,6 +6,7 @@ const panorama = shallowRef<google.maps.StreetViewPanorama | null>(null)
 const currentPov = ref<Pov>({ heading: 0, pitch: 0 })
 const currentZoom = ref(1)
 const isApiLoaded = ref(false)
+const currentImageDate = ref<string | null>(null)
 
 export function useGoogleMaps() {
   function loadApi(apiKey: string): Promise<void> {
@@ -43,6 +44,7 @@ export function useGoogleMaps() {
       showRoadLabels: false,
       motionTracking: false,
       motionTrackingControl: false,
+      imageDateControl: true,
     })
 
     panorama.value = pano
@@ -59,6 +61,21 @@ export function useGoogleMaps() {
       currentZoom.value = pano.getZoom() || 1
     })
 
+    const svService = new google.maps.StreetViewService()
+    function fetchImageDate() {
+      const panoId = pano.getPano()
+      if (!panoId) return
+      svService.getPanorama({ pano: panoId }, (data, status) => {
+        if (status === google.maps.StreetViewStatus.OK && data?.imageDate) {
+          currentImageDate.value = data.imageDate
+        } else {
+          currentImageDate.value = null
+        }
+      })
+    }
+    fetchImageDate()
+    pano.addListener('pano_changed', fetchImageDate)
+
     return pano
   }
 
@@ -72,6 +89,7 @@ export function useGoogleMaps() {
     panorama,
     currentPov,
     currentZoom,
+    currentImageDate,
     isApiLoaded,
     loadApi,
     initPanorama,

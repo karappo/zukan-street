@@ -19,7 +19,7 @@
       </div>
     </header>
     <div v-if="data.desc" class="body">{{ data.desc }}</div>
-    <div class="meta">{{ data.author }} · {{ data.time }}</div>
+    <div class="meta">{{ data.author }} · {{ data.time }}<span v-if="data.imageDate"> · 撮影 {{ data.imageDate }}</span></div>
   </div>
 </template>
 
