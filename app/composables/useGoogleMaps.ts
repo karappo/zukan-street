@@ -74,18 +74,22 @@ export function useGoogleMaps() {
         if (status === google.maps.StreetViewStatus.OK && data?.imageDate) {
           currentImageDate.value = data.imageDate
           // undocumented time 配列からタイムライン情報を抽出
-          const timeArr = (data as any).time
-          if (Array.isArray(timeArr)) {
-            availableTimeline.value = timeArr
-              .map((entry: any) => {
-                const panoId = entry?.pano
-                // ミニファイでプロパティ名が変わりうるため instanceof Date で探す
-                const dateVal = Object.values(entry || {}).find(v => v instanceof Date) as Date | undefined
-                return panoId && dateVal ? { pano: panoId, date: dateVal } : null
-              })
-              .filter((e): e is TimelineEntry => e !== null)
-              .sort((a, b) => b.date.getTime() - a.date.getTime())
-          } else {
+          try {
+            const timeArr = (data as any).time
+            if (Array.isArray(timeArr)) {
+              availableTimeline.value = timeArr
+                .map((entry: any) => {
+                  const entryPanoId = entry?.pano
+                  // ミニファイでプロパティ名が変わりうるため instanceof Date で探す
+                  const dateVal = Object.values(entry || {}).find(v => v instanceof Date) as Date | undefined
+                  return entryPanoId && dateVal ? { pano: entryPanoId, date: dateVal } : null
+                })
+                .filter((e): e is TimelineEntry => e !== null)
+                .sort((a, b) => b.date.getTime() - a.date.getTime())
+            } else {
+              availableTimeline.value = []
+            }
+          } catch {
             availableTimeline.value = []
           }
         } else {
@@ -94,8 +98,13 @@ export function useGoogleMaps() {
         }
       })
     }
+    let fetchTimer: ReturnType<typeof setTimeout> | null = null
+    function debouncedFetchImageDate() {
+      if (fetchTimer) clearTimeout(fetchTimer)
+      fetchTimer = setTimeout(fetchImageDate, 300)
+    }
     fetchImageDate()
-    pano.addListener('pano_changed', fetchImageDate)
+    pano.addListener('pano_changed', debouncedFetchImageDate)
 
     return pano
   }

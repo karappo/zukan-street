@@ -19,7 +19,7 @@
       </div>
     </header>
     <div v-if="data.desc" class="body">{{ data.desc }}</div>
-    <div class="meta">{{ data.author }} · {{ data.time }}<span v-if="data.imageDate"> · 撮影 {{ data.imageDate }}</span></div>
+    <div class="meta">{{ data.author }} · {{ data.time }}<span v-if="data.imageDate"> · 撮影 {{ formatImageDate(data.imageDate) }}</span></div>
   </div>
 </template>
 
@@ -44,6 +44,11 @@ const emit = defineEmits<{
 const isMenuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
 const pinCssColor = computed(() => resolvePinColor(props.data.color))
+
+function formatImageDate(imageDate: string) {
+  const [y, m] = imageDate.split('-')
+  return `${y}年${parseInt(m)}月`
+}
 
 function clickOption(slug: 'edit' | 'reposition' | 'delete') {
   isMenuOpen.value = false

@@ -94,10 +94,15 @@ const { availableTimeline, currentImageDate, switchTimeline } = useGoogleMaps()
 const isTmOpen = ref(false)
 const tmRef = ref<HTMLElement | null>(null)
 
+function parseImageDate(imageDate: string): { year: number; month: number } {
+  const [y, m] = imageDate.split('-')
+  return { year: parseInt(y), month: parseInt(m) }
+}
+
 const currentDateLabel = computed(() => {
   if (!currentImageDate.value) return ''
-  const [y, m] = currentImageDate.value.split('-')
-  return `${y}年${parseInt(m)}月`
+  const { year, month } = parseImageDate(currentImageDate.value)
+  return `${year}年${month}月`
 })
 
 function formatDate(date: Date) {
@@ -106,8 +111,8 @@ function formatDate(date: Date) {
 
 function isActiveDate(entry: TimelineEntry) {
   if (!currentImageDate.value) return false
-  const [y, m] = currentImageDate.value.split('-')
-  return entry.date.getFullYear() === parseInt(y) && entry.date.getMonth() + 1 === parseInt(m)
+  const { year, month } = parseImageDate(currentImageDate.value)
+  return entry.date.getFullYear() === year && entry.date.getMonth() + 1 === month
 }
 
 function handleSelectDate(panoId: string) {

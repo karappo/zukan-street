@@ -27,11 +27,11 @@ const overlaysHidden = ref(false)
 const selectedPinId = ref<string | null>(null)
 const edittingPinId = ref<string | null>(null)
 const draftPosition = ref<DraftPosition | null>(null)
+const { currentImageDate } = useGoogleMaps()
 const filteredPins = computed(() => {
-  const { currentImageDate } = useGoogleMaps()
   const date = currentImageDate.value
   if (!date) return pins.value
-  return pins.value.filter(p => p.imageDate == null || p.imageDate === date)
+  return pins.value.filter(p => p.imageDate === null || p.imageDate === date)
 })
 
 export function usePins() {
